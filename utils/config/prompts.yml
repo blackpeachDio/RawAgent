@@ -1,0 +1,3 @@
+main_prompt_path: prompts/main_prompt.txt #主提示词
+rag_summarize_prompt_path: prompts/rag_summarize.txt #总结
+report_prompt_path: prompts/report_prompt.txt #报告
