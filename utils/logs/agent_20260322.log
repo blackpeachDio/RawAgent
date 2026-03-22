@@ -105,3 +105,31 @@
 2026-03-22 17:27:14,777 - agent - INFO - middleware.py:19 - [tool monitor]执行工具：rag_summarize
 2026-03-22 17:27:14,778 - agent - INFO - middleware.py:20 - [tool monitor]传入参数：{'query': '小户型 扫地机器人 选购建议'}
 2026-03-22 17:27:15,046 - agent - ERROR - middleware.py:31 - 工具rag_summarize调用失败，原因：Error executing plan: Internal error: Error creating hnsw segment reader: Nothing found on disk
+2026-03-22 17:30:39,499 - agent - INFO - offline_index.py:22 - [离线索引] Chroma persist_directory=D:\project\RawAgent\utils\../chroma_db
+2026-03-22 17:30:42,078 - agent - INFO - offline_index.py:97 - [加载知识库]D:\project\RawAgent\utils\../data\扫地机器人100问.pdf 内容加载成功
+2026-03-22 17:30:44,740 - agent - INFO - offline_index.py:97 - [加载知识库]D:\project\RawAgent\utils\../data\扫地机器人100问2.txt 内容加载成功
+2026-03-22 17:30:48,087 - agent - INFO - offline_index.py:97 - [加载知识库]D:\project\RawAgent\utils\../data\扫拖一体机器人100问.txt 内容加载成功
+2026-03-22 17:30:54,274 - agent - INFO - offline_index.py:97 - [加载知识库]D:\project\RawAgent\utils\../data\故障排除.txt 内容加载成功
+2026-03-22 17:30:57,771 - agent - INFO - offline_index.py:97 - [加载知识库]D:\project\RawAgent\utils\../data\维护保养.txt 内容加载成功
+2026-03-22 17:31:00,993 - agent - INFO - offline_index.py:97 - [加载知识库]D:\project\RawAgent\utils\../data\选购指南.txt 内容加载成功
+2026-03-22 17:31:46,853 - agent - INFO - online_query.py:33 - [RAG] Chroma persist_directory=D:\project\RawAgent\utils\../chroma_db
+2026-03-22 17:31:46,923 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有1条消息。
+2026-03-22 17:31:46,923 - agent - DEBUG - middleware.py:42 - [log_before_model]HumanMessage | 水箱加水后漏水怎么处理
+2026-03-22 17:31:53,312 - agent - INFO - middleware.py:19 - [tool monitor]执行工具：rag_summarize
+2026-03-22 17:31:53,313 - agent - INFO - middleware.py:20 - [tool monitor]传入参数：{'query': '扫拖一体机水箱加水后漏水处理方法'}
+2026-03-22 17:31:53,651 - agent - INFO - online_query.py:68 - [RAG] 用户问题: 扫拖一体机水箱加水后漏水处理方法 | 【参考资料1】元数据: {'source': 'D:\\project\\RawAgent\\utils\\../data\\扫拖一体机器人100问.txt'} | 正文: ### 拖地系统专属类
+11. **水箱加水后漏水怎么处理？**
+- 检查水箱盖是否拧紧、水箱密封圈是否脱落或破损，确认出水管无堵塞，加水至刻度线内，避免过满溢出。
+12. **拖地时出水量过大或过小怎么调节？**
+- 在APP中进入【拖地设置】，一般分低、中、高三档出水量，木地板选低档，瓷砖、水泥地可选中高档。
+13. **水箱没水了机器人会自动停止吗？**
+2026-03-22 17:31:53,652 - agent - INFO - online_query.py:68 - [RAG] 用户问题: 扫拖一体机水箱加水后漏水处理方法 | 【参考资料2】元数据: {'source': 'D:\\project\\RawAgent\\utils\\../data\\故障排除.txt'} | 正文: 15. 故障现象：拖地时水箱漏水；检测：水箱盖是否拧紧，密封圈是否老化、脱落，出水管是否堵塞；修复：拧紧水箱盖，更换老化密封圈，疏通出水管。
+
+16. 故障现象：拖地不出水；检测：水箱是否有水，出水量是否调至最低，出水管是否堵塞；修复：加注清水，调高出水量，用牙签轻轻疏通出水管。
+2026-03-22 17:31:53,652 - agent - INFO - online_query.py:68 - [RAG] 用户问题: 扫拖一体机水箱加水后漏水处理方法 | 【参考资料3】元数据: {'source': 'D:\\project\\RawAgent\\utils\\../data\\维护保养.txt'} | 正文: 9. 每次安装拖布前，检查拖布是否干净、无硬化，确保拖地时无二次污染。
+10. 水箱密封圈每周用干布擦拭，检查无老化、开裂、变形，保证水箱密封严实不漏水。
+11. 自动洗拖布机型，每周清理清洁仓的水位传感器，用干布轻擦，避免污渍遮挡导致误判。
+12. 拖地时若出水量异常，立即清理水箱出水口和出水管，用牙签轻轻疏通，避免堵塞。
+2026-03-22 17:31:56,172 - agent - INFO - middleware.py:24 - [tool monitor]工具rag_summarize调用成功
+2026-03-22 17:31:56,173 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有3条消息。
+2026-03-22 17:31:56,173 - agent - DEBUG - middleware.py:42 - [log_before_model]ToolMessage | 水箱加水后漏水时，应检查水箱盖是否拧紧、密封圈是否脱落或老化，并确认出水管无堵塞；加水时勿超过刻度线，避免过满溢出。若密封圈老化，需及时更换；出水管堵塞可用牙签轻轻疏通。
