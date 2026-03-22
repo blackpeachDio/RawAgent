@@ -4,7 +4,21 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="dfdf981f-5b4d-43c8-9a33-8c11da0dfdb9" name="更改" comment="feat: update BGE reranker config and endpoint" />
+    <list default="true" id="dfdf981f-5b4d-43c8-9a33-8c11da0dfdb9" name="更改" comment="chore: ignore IDE config files">
+      <change afterPath="$PROJECT_DIR$/eval/golden_regression.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/rag/retrieval_pipeline.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/chroma_db/3389132f-3587-40be-a1d9-8a4268ede766/data_level0.bin" beforeDir="false" afterPath="$PROJECT_DIR$/chroma_db/3389132f-3587-40be-a1d9-8a4268ede766/data_level0.bin" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/chroma_db/3389132f-3587-40be-a1d9-8a4268ede766/length.bin" beforeDir="false" afterPath="$PROJECT_DIR$/chroma_db/3389132f-3587-40be-a1d9-8a4268ede766/length.bin" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/chroma_db/chroma.sqlite3" beforeDir="false" afterPath="$PROJECT_DIR$/chroma_db/chroma.sqlite3" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/config/chroma.yml" beforeDir="false" afterPath="$PROJECT_DIR$/config/chroma.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/eval/golden_dataset.json" beforeDir="false" afterPath="$PROJECT_DIR$/eval/golden_dataset.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/eval/run_eval.py" beforeDir="false" afterPath="$PROJECT_DIR$/eval/run_eval.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/prompts/rag_summarize.txt" beforeDir="false" afterPath="$PROJECT_DIR$/prompts/rag_summarize.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rag/online_query.py" beforeDir="false" afterPath="$PROJECT_DIR$/rag/online_query.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils/logs/agent_20260322.log" beforeDir="false" afterPath="$PROJECT_DIR$/utils/logs/agent_20260322.log" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -88,7 +102,7 @@
       <recent name="D:\project\rawAgent\utils" />
     </key>
   </component>
-  <component name="RunManager" selected="Python.online_query">
+  <component name="RunManager" selected="Python.react_agent (1)">
     <configuration name="121" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="RawAgent" />
       <option name="ENV_FILES" value="" />
@@ -211,9 +225,9 @@
     </configuration>
     <recent_temporary>
       <list>
+        <item itemvalue="Python.react_agent (1)" />
         <item itemvalue="Python.online_query" />
         <item itemvalue="Python.run_eval" />
-        <item itemvalue="Python.react_agent (1)" />
         <item itemvalue="Python.offline_index" />
         <item itemvalue="Python.121" />
       </list>
@@ -239,7 +253,7 @@
       <workItem from="1774009835035" duration="10074000" />
       <workItem from="1774027385003" duration="38000" />
       <workItem from="1774027446415" duration="1631000" />
-      <workItem from="1774164307950" duration="11767000" />
+      <workItem from="1774164307950" duration="15354000" />
     </task>
     <task id="LOCAL-00001" summary="feat: new">
       <option name="closed" value="true" />
@@ -345,7 +359,15 @@
       <option name="project" value="LOCAL" />
       <updated>1774175946440</updated>
     </task>
-    <option name="localTasksCounter" value="14" />
+    <task id="LOCAL-00014" summary="chore: ignore IDE config files">
+      <option name="closed" value="true" />
+      <created>1774176736733</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1774176736733</updated>
+    </task>
+    <option name="localTasksCounter" value="15" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -375,7 +397,8 @@
     <MESSAGE value="feat: add RAG evaluation script and golden dataset" />
     <MESSAGE value="feat: add BGE reranker support for RAG retrieval" />
     <MESSAGE value="feat: update BGE reranker config and endpoint" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat: update BGE reranker config and endpoint" />
+    <MESSAGE value="chore: ignore IDE config files" />
+    <option name="LAST_COMMIT_MESSAGE" value="chore: ignore IDE config files" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -400,7 +423,7 @@
     <SUITE FILE_PATH="coverage/RawAgent$offline_index.coverage" NAME="offline_index 覆盖结果" MODIFIED="1774171837758" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/rag" />
     <SUITE FILE_PATH="coverage/rawAgent$logger_utils.coverage" NAME="logger_utils 覆盖结果" MODIFIED="1773854264937" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/utils" />
     <SUITE FILE_PATH="coverage/RawAgent$vector_store.coverage" NAME="vector_store 覆盖结果" MODIFIED="1774014696194" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/rag" />
-    <SUITE FILE_PATH="coverage/RawAgent$react_agent__1_.coverage" NAME="react_agent (1) 覆盖结果" MODIFIED="1774171904884" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/agent" />
+    <SUITE FILE_PATH="coverage/RawAgent$react_agent__1_.coverage" NAME="react_agent (1) 覆盖结果" MODIFIED="1774179630699" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/agent" />
     <SUITE FILE_PATH="coverage/RawAgent$rag_service.coverage" NAME="rag_service 覆盖结果" MODIFIED="1774027748590" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/rag" />
   </component>
 </project>

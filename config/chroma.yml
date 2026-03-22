@@ -14,6 +14,18 @@ rerank_model: BAAI/bge-reranker-base
 rerank_device: cpu
 # 个别模型需 trust_remote_code，一般为 false
 rerank_trust_remote_code: false
+# 精排后若最高分仍低于该阈值，视为不相关并拒答（不填或注释则关闭；数值需按模型实际分数调参）
+# rerank_refuse_min_score: -10.0
+
+# --- 查询改写：多路向量召回合并后再精排（提召回）---
+query_rewrite_enabled: true
+query_rewrite_max_variants: 2
+# 合并去重后参与 BGE 打分的最大条数
+merge_max_pool: 60
+
+# --- 混合检索：BM25 与向量结果合并去重后再精排（全库建 BM25，首次略慢）---
+hybrid_bm25_enabled: true
+
 data_path: ../data # 数据文件夹
 md5_hex_store: md5.text # 去重记录
 allow_knowledge_file_type: [ "txt", "pdf" ]

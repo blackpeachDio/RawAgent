@@ -1,13 +1,15 @@
 """
 在线查询：连接已有 Chroma 索引，检索 + 总结（RAG），供 Agent 工具调用。
-检索：向量粗排（fetch_k）→ 可选 BGE CrossEncoder 精排（top_n = k）→ 拼进 prompt。
+检索：可选查询改写、可选 BM25 混合、向量粗排、合并去重、BGE 精排、可选分数拒答。
 """
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
+from langchain_core.runnables import RunnableLambda
 
 from model.factory import chat_model, embedding_model
+from rag.retrieval_pipeline import REFUSAL_MESSAGE, build_bm25_retriever, retrieve_documents
 from utils.config_utils import chroma_conf
 from utils.log_utils import logger
 from utils.path_utils import get_abs_path
@@ -27,7 +29,7 @@ def print_prompt(prompt):
 
 
 class OnlineQueryService:
-    """只读访问持久化向量库，提供检索器。"""
+    """只读访问持久化向量库，提供检索器（统一走 retrieval_pipeline）。"""
 
     def __init__(self):
         persist_dir = _chroma_persist_directory()
@@ -37,56 +39,18 @@ class OnlineQueryService:
             embedding_function=embedding_model,
             persist_directory=persist_dir,
         )
+        self._bm25_retriever = None
 
     def get_retriever(self):
-        final_k = int(chroma_conf["k"])
-        rerank_on = bool(chroma_conf.get("rerank_enabled", False))
+        def _pipe(q: str) -> list[Document]:
+            bm25 = None
+            if chroma_conf.get("hybrid_bm25_enabled"):
+                if self._bm25_retriever is None:
+                    self._bm25_retriever = build_bm25_retriever(self.vector_store)
+                bm25 = self._bm25_retriever
+            return retrieve_documents(self.vector_store, q, bm25_retriever=bm25)
 
-        if not rerank_on:
-            return self.vector_store.as_retriever(search_kwargs={"k": final_k})
-
-        fetch_k = int(chroma_conf.get("fetch_k", max(final_k, 20)))
-        if fetch_k < final_k:
-            logger.warning(
-                "[RAG] fetch_k(%s) < k(%s)，已把 fetch_k 调整为 k",
-                fetch_k,
-                final_k,
-            )
-            fetch_k = final_k
-
-        try:
-            from langchain_classic.retrievers import ContextualCompressionRetriever
-            from langchain_classic.retrievers.document_compressors.cross_encoder_rerank import (
-                CrossEncoderReranker,
-            )
-            from langchain_community.cross_encoders import HuggingFaceCrossEncoder
-        except ImportError as e:
-            raise ImportError(
-                "已启用 BGE 精排：请安装 langchain-classic 与 sentence-transformers"
-            ) from e
-
-        base = self.vector_store.as_retriever(search_kwargs={"k": fetch_k})
-
-        model_name = chroma_conf.get("rerank_model") or "BAAI/bge-reranker-v2-m3"
-        device = str(chroma_conf.get("rerank_device", "cpu"))
-        model_kwargs: dict = {"device": device}
-        if chroma_conf.get("rerank_trust_remote_code"):
-            model_kwargs["trust_remote_code"] = True
-
-        cross = HuggingFaceCrossEncoder(model_name=model_name, model_kwargs=model_kwargs)
-        compressor = CrossEncoderReranker(model=cross, top_n=final_k)
-        logger.info(
-            "[RAG] 精排: BGE CrossEncoder model=%s device=%s | 粗排 fetch_k=%s | 精排 top_n=%s",
-            model_name,
-            device,
-            fetch_k,
-            final_k,
-        )
-
-        return ContextualCompressionRetriever(
-            base_compressor=compressor,
-            base_retriever=base,
-        )
+        return RunnableLambda(_pipe)
 
 
 class RagSummarizeService(object):
@@ -99,7 +63,6 @@ class RagSummarizeService(object):
         self.chain = self._init_chain()
 
     def _init_chain(self):
-        # chain = self.prompt_template | print_prompt | self.model | StrOutputParser()
         chain = self.prompt_template | self.model | StrOutputParser()
         return chain
 
@@ -108,6 +71,10 @@ class RagSummarizeService(object):
 
     def rag_summarize(self, query: str) -> str:
         context_docs = self.retriever_docs(query)
+
+        if not context_docs:
+            logger.warning("[RAG] 无可用检索片段或已触发拒答阈值 | 用户问题: %s", query)
+            return REFUSAL_MESSAGE
 
         context = ""
         counter = 0
@@ -121,9 +88,6 @@ class RagSummarizeService(object):
                 doc.page_content,
             )
             context += f"【参考资料{counter}】: 参考资料：{doc.page_content} | 参考元数据：{doc.metadata}\n"
-
-        if not context_docs:
-            logger.warning("[RAG] 未检索到任何片段，context 为空 | 用户问题: %s", query)
 
         return self.chain.invoke(
             {

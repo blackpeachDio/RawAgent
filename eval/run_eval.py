@@ -28,6 +28,10 @@ eval/run_eval.py — RAG 离线评测脚本
       若填写，且未加 --skip-generation，会用模型生成答案后与金标算相似度。
       为什么需要：要量化「答得是否接近标准说法」时才有用。
 
+  tier (可选)
+      分层标签，如 easy、hard、regression；用于汇总时按 tier 打印 Source Hit / MRR。
+      固定回归集可单独建 golden_regression.json，用 --only-tier regression 只跑回归题。
+
   _comment 等非标准字段
       可写在某条里作备忘；只要带 question 且结构合法即可。
 
@@ -95,6 +99,7 @@ import json
 import os
 import re
 import sys
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any
 
@@ -119,6 +124,8 @@ class GoldenItem:
     relevant_sources: list[str]
     # 可选的标准答案；有则参与 char_bigram_jaccard
     ground_truth_answer: str | None
+    # 分层：easy | hard | regression 等，用于分桶统计；固定 regression 集可做 CI 回归
+    tier: str = "default"
 
 
 def _load_golden(path: str) -> list[GoldenItem]:
@@ -130,12 +137,14 @@ def _load_golden(path: str) -> list[GoldenItem]:
         if not isinstance(row, dict) or "question" not in row:
             continue
         g = (row.get("ground_truth_answer") or "").strip()
+        tier = str(row.get("tier") or "default").strip() or "default"
         out.append(
             GoldenItem(
                 id=str(row.get("id", "")),
                 question=str(row["question"]).strip(),
                 relevant_sources=[str(x).strip() for x in row.get("relevant_sources", []) if str(x).strip()],
                 ground_truth_answer=g if g else None,
+                tier=tier,
             )
         )
     return out
@@ -247,6 +256,11 @@ def main() -> None:
         action="store_true",
         help="不调用 rag_summarize，只跑检索并算 Source Hit / MRR（省生成费用）",
     )
+    parser.add_argument(
+        "--only-tier",
+        default=None,
+        help="只评测指定 tier（与金标字段 tier 一致），如 regression 用于固定回归集",
+    )
     args = parser.parse_args()
 
     items = _load_golden(args.golden)
@@ -265,8 +279,13 @@ def main() -> None:
     rranks: list[float] = []
     sims: list[float] = []
     faith_scores: list[float] = []
+    tier_hits: dict[str, int] = defaultdict(int)
+    tier_labeled: dict[str, int] = defaultdict(int)
+    tier_rranks: dict[str, list[float]] = defaultdict(list)
 
     for it in items:
+        if args.only_tier and it.tier != args.only_tier:
+            continue
         if not it.relevant_sources:
             print(f"[{it.id}] 跳过：未配置 relevant_sources，无法算检索召回代理指标")
             continue
@@ -276,12 +295,16 @@ def main() -> None:
         docs = retriever.invoke(it.question)
         metas = [d.metadata or {} for d in docs]
         hit, pos = source_hit_at_k(metas, it.relevant_sources)
+        tier_labeled[it.tier] += 1
         if hit:
             hits += 1
+            tier_hits[it.tier] += 1
             # MRR 常用定义：仅关心第一个相关结果的 1/rank
             rranks.append(1.0 / pos)
+            tier_rranks[it.tier].append(1.0 / pos)
         else:
             rranks.append(0.0)
+            tier_rranks[it.tier].append(0.0)
 
         ctx = build_context_for_judge(docs)
         answer = ""
@@ -296,7 +319,7 @@ def main() -> None:
             print(f"[{it.id}] faithfulness={fs:.3f}")
 
         print(
-            f"[{it.id}] SourceHit@k={'1' if hit else '0'} | "
+            f"[{it.id}] tier={it.tier} | SourceHit@k={'1' if hit else '0'} | "
             f"MRR_step={rranks[-1]:.3f} | "
             f"topk_sources={[ _basename_from_metadata(m) for m in metas ]}"
         )
@@ -314,6 +337,17 @@ def main() -> None:
         print(f"Answer similarity (char bigram Jaccard vs ground_truth, mean): {sum(sims) / len(sims):.3f}")
     if faith_scores:
         print(f"Faithfulness (LLM judge, mean): {sum(faith_scores) / len(faith_scores):.3f}")
+
+    if tier_labeled:
+        print("--- by tier ---")
+        for t in sorted(tier_labeled.keys()):
+            tl = tier_labeled[t]
+            th = tier_hits.get(t, 0)
+            tr = tier_rranks.get(t, [])
+            mrr_t = sum(tr) / len(tr) if tr else 0.0
+            print(
+                f"tier={t} | labeled={tl} | Source Hit@k={th / tl:.3f} | MRR={mrr_t:.3f}"
+            )
 
 
 if __name__ == "__main__":

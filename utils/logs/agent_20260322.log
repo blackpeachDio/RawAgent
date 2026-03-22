@@ -195,3 +195,53 @@
 2. 吸力参数：家用建议选择≥3000Pa吸力机型，地毯场景需≥4000Pa，吸力可调节更适配不同地面。
 
 3. 导航技术：激光导航定位精准、抗干扰强，适合复杂户型；视觉导航性价比高，避免强光环境使用。
+2026-03-22 19:38:31,054 - agent - INFO - online_query.py:36 - [RAG] Chroma persist_directory=D:\project\RawAgent\utils\../chroma_db
+2026-03-22 19:38:31,195 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有1条消息。
+2026-03-22 19:38:31,195 - agent - DEBUG - middleware.py:42 - [log_before_model]HumanMessage | 水箱加水后漏水怎么处理
+2026-03-22 19:38:36,209 - agent - INFO - middleware.py:19 - [tool monitor]执行工具：rag_summarize
+2026-03-22 19:38:36,209 - agent - INFO - middleware.py:20 - [tool monitor]传入参数：{'query': '扫拖一体机水箱加水后漏水处理方法'}
+2026-03-22 19:38:39,794 - agent - INFO - retrieval_pipeline.py:29 - [RAG] HF_ENDPOINT=https://hf-mirror.com
+2026-03-22 19:38:50,204 - agent - INFO - online_query.py:83 - [RAG] 用户问题: 扫拖一体机水箱加水后漏水处理方法 | 【参考资料1】元数据: {'source': 'D:\\project\\RawAgent\\utils\\../data\\扫拖一体机器人100问.txt'} | 正文: ### 拖地系统专属类
+11. **水箱加水后漏水怎么处理？**
+- 检查水箱盖是否拧紧、水箱密封圈是否脱落或破损，确认出水管无堵塞，加水至刻度线内，避免过满溢出。
+12. **拖地时出水量过大或过小怎么调节？**
+- 在APP中进入【拖地设置】，一般分低、中、高三档出水量，木地板选低档，瓷砖、水泥地可选中高档。
+13. **水箱没水了机器人会自动停止吗？**
+2026-03-22 19:38:50,204 - agent - INFO - online_query.py:83 - [RAG] 用户问题: 扫拖一体机水箱加水后漏水处理方法 | 【参考资料2】元数据: {'source': 'D:\\project\\RawAgent\\utils\\../data\\维护保养.txt'} | 正文: ## 扫拖一体拖地功能专属维护（40条）
+1. 每次拖地完成后，立即拆卸拖布，用清水冲洗干净，拧干后放在通风处晾干，避免发霉。
+2. 每日清理拖布支架，用软毛刷挑出缠绕的毛发、线头，保证支架干净无杂物。
+3. 每次使用水箱前，检查水箱内无杂质、水垢，加水时用清水，避免自来水直接加注产生水垢。
+4. 拖地完成后，将水箱内剩余的清水排空，用干布擦拭水箱内部和出水口，防止水垢堵塞。
+2026-03-22 19:38:50,204 - agent - INFO - online_query.py:83 - [RAG] 用户问题: 扫拖一体机水箱加水后漏水处理方法 | 【参考资料3】元数据: {'source': 'D:\\project\\RawAgent\\utils\\../data\\扫拖一体机器人100问.txt'} | 正文: - 当APP推送污水仓满溢提醒时，及时倾倒污水，清洗污水仓和过滤网，避免污水回流污染清洁系统。
+22. **清洁仓加水后不出水清洗拖布怎么处理？**
+- 检查清洁仓进水管是否堵塞，确认洗拖布水泵是否正常工作，清理后重启机器人，仍故障联系售后。
+23. **拖布支架松动怎么固定？**
+- 检查支架卡扣是否断裂，若卡扣完好，将支架对准机身卡槽用力按压至“咔哒”声，确认无松动后再使用。
+2026-03-22 19:38:57,207 - agent - INFO - middleware.py:24 - [tool monitor]工具rag_summarize调用成功
+2026-03-22 19:38:57,208 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有3条消息。
+2026-03-22 19:38:57,208 - agent - DEBUG - middleware.py:42 - [log_before_model]ToolMessage | 检查水箱盖是否拧紧、水箱密封圈是否脱落或破损，确认出水管无堵塞，加水至刻度线内，避免过满溢出。
+2026-03-22 19:40:35,266 - agent - INFO - online_query.py:36 - [RAG] Chroma persist_directory=D:\project\RawAgent\utils\../chroma_db
+2026-03-22 19:40:35,327 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有1条消息。
+2026-03-22 19:40:35,327 - agent - DEBUG - middleware.py:42 - [log_before_model]HumanMessage | 水箱加水后漏水怎么处理
+2026-03-22 19:40:43,461 - agent - INFO - middleware.py:19 - [tool monitor]执行工具：rag_summarize
+2026-03-22 19:40:43,461 - agent - INFO - middleware.py:20 - [tool monitor]传入参数：{'query': '扫地机器人水箱加水后漏水处理方法'}
+2026-03-22 19:40:51,777 - agent - INFO - retrieval_pipeline.py:78 - [RAG] 查询改写: 3 条变体 | ['扫地机器人水箱加水后漏水处理方法', '扫地机器人加水后水箱漏水怎么办', '水箱注水后扫地机器人漏水如何解决']
+2026-03-22 19:41:03,611 - agent - INFO - retrieval_pipeline.py:29 - [RAG] HF_ENDPOINT=https://hf-mirror.com
+2026-03-22 19:41:14,356 - agent - INFO - online_query.py:83 - [RAG] 用户问题: 扫地机器人水箱加水后漏水处理方法 | 【参考资料1】元数据: {'source': 'D:\\project\\RawAgent\\utils\\../data\\扫拖一体机器人100问.txt'} | 正文: ### 拖地系统专属类
+11. **水箱加水后漏水怎么处理？**
+- 检查水箱盖是否拧紧、水箱密封圈是否脱落或破损，确认出水管无堵塞，加水至刻度线内，避免过满溢出。
+12. **拖地时出水量过大或过小怎么调节？**
+- 在APP中进入【拖地设置】，一般分低、中、高三档出水量，木地板选低档，瓷砖、水泥地可选中高档。
+13. **水箱没水了机器人会自动停止吗？**
+2026-03-22 19:41:14,356 - agent - INFO - online_query.py:83 - [RAG] 用户问题: 扫地机器人水箱加水后漏水处理方法 | 【参考资料2】元数据: {'source': 'D:\\project\\RawAgent\\utils\\../data\\扫地机器人100问2.txt'} | 正文: 29. **万向轮卡顿、异响怎么解决？**
+- 用镊子清理万向轮缠绕的毛发、线头，滴少量润滑油在转轴处，避免卡顿影响移动。
+30. **驱动轮打滑、不转怎么处理？**
+- 清理驱动轮缝隙的杂物和毛发，检查轮胎是否磨损，磨损严重及时更换，避免机器人无法移动。
+31. **水箱漏水怎么办？**
+- 检查水箱盖是否拧紧，出水管是否堵塞，调小出水量，拖地时避免机器人剧烈晃动，更换破损水箱。
+2026-03-22 19:41:14,356 - agent - INFO - online_query.py:83 - [RAG] 用户问题: 扫地机器人水箱加水后漏水处理方法 | 【参考资料3】元数据: {'source': 'D:\\project\\RawAgent\\utils\\../data\\故障排除.txt'} | 正文: 159. 故障现象：主刷清扫时将地毯纤维带出，损坏地毯；检测：主刷是否为地毯专用款，吸力是否过大；修复：更换地毯专用主刷，调小吸力。
+
+160. 故障现象：拖地时机器人在门槛处漏水；检测：水箱是否倾斜，密封圈是否破损，出水量是否过大；修复：调整机器人位置，更换密封圈，调小出水量。
+2026-03-22 19:41:36,154 - agent - INFO - middleware.py:24 - [tool monitor]工具rag_summarize调用成功
+2026-03-22 19:41:36,155 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有3条消息。
+2026-03-22 19:41:36,155 - agent - DEBUG - middleware.py:42 - [log_before_model]ToolMessage | 检查水箱盖是否拧紧、密封圈是否脱落或破损，确认出水管无堵塞，加水不超过刻度线；若漏水仍存在，可调小出水量、避免机器人剧烈晃动，必要时更换破损水箱或密封圈。
