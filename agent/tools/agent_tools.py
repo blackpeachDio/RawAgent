@@ -3,7 +3,7 @@ import random
 
 from langchain_core.tools import tool
 
-from rag.rag_service import RagSummarizeService
+from rag.online_query import RagSummarizeService
 from utils.config_utils import agent_conf
 from utils.log_utils import logger
 from utils.path_utils import get_abs_path

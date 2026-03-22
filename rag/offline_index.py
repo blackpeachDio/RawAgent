@@ -1,3 +1,6 @@
+"""
+离线索引：从 data 目录读取文档，切分、向量化并写入 Chroma（含 MD5 去重）。
+"""
 import os
 
 from langchain_chroma import Chroma
@@ -11,25 +14,21 @@ from utils.log_utils import logger
 from utils.path_utils import get_abs_path
 
 
-class VectorStoreService:
+class OfflineIndexService:
+    """仅负责构建 / 增量更新向量索引，不在线回答。"""
+
     def __init__(self):
-        # 向量存储
         self.vector_store = Chroma(
             collection_name=chroma_conf["collection_name"],
             embedding_function=embedding_model,
             persist_directory=chroma_conf["persist_directory"],
         )
-        # 文本分割
         self.spliter = RecursiveCharacterTextSplitter(
             chunk_size=chroma_conf["chunk_size"],
             chunk_overlap=chroma_conf["chunk_overlap"],
             separators=chroma_conf["separators"],
             length_function=len,
         )
-
-    # 获取检索器
-    def get_retriever(self):
-        return self.vector_store.as_retriever(search_kwargs={"k": chroma_conf["k"]})
 
     def load_document(self):
         """
@@ -40,17 +39,16 @@ class VectorStoreService:
 
         def check_md5_hex(md5_for_check: str):
             if not os.path.exists(get_abs_path(chroma_conf["md5_hex_store"])):
-                # 创建文件
                 open(get_abs_path(chroma_conf["md5_hex_store"]), "w", encoding="utf-8").close()
-                return False  # md5 没处理过
+                return False
 
             with open(get_abs_path(chroma_conf["md5_hex_store"]), "r", encoding="utf-8") as f:
                 for line in f.readlines():
                     line = line.strip()
                     if line == md5_for_check:
-                        return True  # md5 处理过
+                        return True
 
-                return False  # md5 没处理过
+                return False
 
         def save_md5_hex(md5_for_check: str):
             with open(get_abs_path(chroma_conf["md5_hex_store"]), "a", encoding="utf-8") as f:
@@ -65,14 +63,12 @@ class VectorStoreService:
 
             return []
 
-        # 可以处理的文件路径
         allowed_files_path: list[str] = listdir_with_allowed_type(
             get_abs_path(chroma_conf["data_path"]),
             tuple(chroma_conf["allow_knowledge_file_type"]),
         )
 
         for path in allowed_files_path:
-            # 获取文件的MD5
             md5_hex = get_file_md5_hex(path)
 
             if check_md5_hex(md5_hex):
@@ -92,26 +88,16 @@ class VectorStoreService:
                     logger.warning(f"[加载知识库]{path}分片后没有有效文本内容，跳过")
                     continue
 
-                # 将内容存入向量库
                 self.vector_store.add_documents(split_document)
 
-                # 记录这个已经处理好的文件的md5，避免下次重复加载
                 save_md5_hex(md5_hex)
 
                 logger.info(f"[加载知识库]{path} 内容加载成功")
             except Exception as e:
-                # exc_info为True会记录详细的报错堆栈，如果为False仅记录报错信息本身
                 logger.error(f"[加载知识库]{path}加载失败：{str(e)}", exc_info=True)
                 continue
 
 
-if __name__ == '__main__':
-    vs = VectorStoreService()
-    vs.load_document()
-
-    retriever = vs.get_retriever()
-    res = retriever.invoke("迷路")
-
-    for re in res:
-        print(re.page_content)
-        print('_'*20)
+if __name__ == "__main__":
+    indexer = OfflineIndexService()
+    indexer.load_document()

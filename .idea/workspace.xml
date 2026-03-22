@@ -4,10 +4,13 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="dfdf981f-5b4d-43c8-9a33-8c11da0dfdb9" name="更改" comment="feat: rag服务实现">
-      <change afterPath="$PROJECT_DIR$/agent/react_agent.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/agent/tools/middleware.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
+    <list default="true" id="dfdf981f-5b4d-43c8-9a33-8c11da0dfdb9" name="更改" comment="feat: add agent logs and workspace config">
+      <change afterPath="$PROJECT_DIR$/rag/offline_index.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/rag/online_query.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/agent/tools/agent_tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/agent/tools/agent_tools.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rag/rag_service.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/rag/vector_store.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -238,7 +241,7 @@
       <workItem from="1774009835035" duration="10074000" />
       <workItem from="1774027385003" duration="38000" />
       <workItem from="1774027446415" duration="1631000" />
-      <workItem from="1774164307950" duration="3973000" />
+      <workItem from="1774164307950" duration="4749000" />
     </task>
     <task id="LOCAL-00001" summary="feat: new">
       <option name="closed" value="true" />
@@ -264,7 +267,23 @@
       <option name="project" value="LOCAL" />
       <updated>1774166674859</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="feat: add react agent and streamlit app">
+      <option name="closed" value="true" />
+      <created>1774168873458</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1774168873458</updated>
+    </task>
+    <task id="LOCAL-00005" summary="feat: add agent logs and workspace config">
+      <option name="closed" value="true" />
+      <created>1774168906179</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1774168906179</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -284,7 +303,9 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="feat: new" />
     <MESSAGE value="feat: rag服务实现" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat: rag服务实现" />
+    <MESSAGE value="feat: add react agent and streamlit app" />
+    <MESSAGE value="feat: add agent logs and workspace config" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat: add agent logs and workspace config" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/rawAgent$logger_utils.coverage" NAME="logger_utils 覆盖结果" MODIFIED="1773854264937" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/utils" />
