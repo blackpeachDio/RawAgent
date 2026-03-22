@@ -9,7 +9,13 @@ from langchain_core.prompts import PromptTemplate
 from model.factory import chat_model, embedding_model
 from utils.config_utils import chroma_conf
 from utils.log_utils import logger
+from utils.path_utils import get_abs_path
 from utils.prompt_utils import load_rag_prompts
+
+
+def _chroma_persist_directory() -> str:
+    """与 cwd 无关，固定解析到项目内 chroma 目录（配置里 persist_directory 相对 utils）。"""
+    return get_abs_path(chroma_conf["persist_directory"])
 
 
 def print_prompt(prompt):
@@ -23,10 +29,12 @@ class OnlineQueryService:
     """只读访问持久化向量库，提供检索器。"""
 
     def __init__(self):
+        persist_dir = _chroma_persist_directory()
+        logger.info("[RAG] Chroma persist_directory=%s", persist_dir)
         self.vector_store = Chroma(
             collection_name=chroma_conf["collection_name"],
             embedding_function=embedding_model,
-            persist_directory=chroma_conf["persist_directory"],
+            persist_directory=persist_dir,
         )
 
     def get_retriever(self):

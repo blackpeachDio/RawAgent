@@ -18,10 +18,12 @@ class OfflineIndexService:
     """仅负责构建 / 增量更新向量索引，不在线回答。"""
 
     def __init__(self):
+        persist_dir = get_abs_path(chroma_conf["persist_directory"])
+        logger.info("[离线索引] Chroma persist_directory=%s", persist_dir)
         self.vector_store = Chroma(
             collection_name=chroma_conf["collection_name"],
             embedding_function=embedding_model,
-            persist_directory=chroma_conf["persist_directory"],
+            persist_directory=persist_dir,
         )
         self.spliter = RecursiveCharacterTextSplitter(
             chunk_size=chroma_conf["chunk_size"],
