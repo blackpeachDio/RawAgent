@@ -7,35 +7,44 @@ from agent.react_agent import ReactAgent
 st.title("智扫通机器人智能客服")
 st.divider()
 
+# 每个浏览器会话独立的 session_state → 对话隔离（不同用户/标签页互不共享 chat_messages）
 if "agent" not in st.session_state:
     st.session_state["agent"] = ReactAgent()
 
-if "message" not in st.session_state:
-    st.session_state["message"] = []
+# 兼容旧版仅存的 message 列表
+if "chat_messages" not in st.session_state:
+    st.session_state["chat_messages"] = st.session_state.pop("message", None) or []
 
-for message in st.session_state["message"]:
+with st.sidebar:
+    st.caption("本会话的对话仅保存在当前浏览器标签页，与其他访问者隔离。")
+    if st.button("清空本轮对话"):
+        st.session_state["chat_messages"] = []
+        st.rerun()
+
+for message in st.session_state["chat_messages"]:
     st.chat_message(message["role"]).write(message["content"])
 
-# 用户输入提示词
 prompt = st.chat_input()
 
 if prompt:
     st.chat_message("user").write(prompt)
-    st.session_state["message"].append({"role": "user", "content": prompt})
+    st.session_state["chat_messages"].append({"role": "user", "content": prompt})
 
-    response_messages = []
+    full_parts: list[str] = []
     with st.spinner("智能客服思考中..."):
-        res_stream = st.session_state["agent"].execute_stream(prompt)
+        messages_for_agent = list(st.session_state["chat_messages"])
 
-        def capture(generator, cache_list):
-
-            for chunk in generator:
-                cache_list.append(chunk)
-
-                for char in chunk:
+        def stream_chars():
+            for piece in st.session_state["agent"].execute_stream(messages_for_agent):
+                full_parts.append(piece)
+                for char in piece:
                     time.sleep(0.01)
                     yield char
 
-        st.chat_message("assistant").write_stream(capture(res_stream, response_messages))
-        st.session_state["message"].append({"role": "assistant", "content": response_messages[-1]})
-        st.rerun()
+        st.chat_message("assistant").write_stream(stream_chars())
+
+    assistant_text = "".join(full_parts)
+    st.session_state["chat_messages"].append(
+        {"role": "assistant", "content": assistant_text}
+    )
+    st.rerun()

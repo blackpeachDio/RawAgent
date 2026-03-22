@@ -1,1 +1,4 @@
 external_data_path: ../data/external/records.csv
+
+# 多轮对话：传入模型的消息条数上限（user/assistant 交替计数）；超出则丢弃最早的消息
+conversation_max_messages: 40
