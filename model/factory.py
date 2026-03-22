@@ -15,9 +15,22 @@ class BaseModelFactory(ABC):
         pass
 
 
+def _chat_model_kwargs() -> dict:
+    """DashScope Generation：temperature / max_tokens（见 config/rag.yml）。"""
+    m: dict = {}
+    if rag_conf.get("chat_temperature") is not None:
+        m["temperature"] = float(rag_conf["chat_temperature"])
+    if rag_conf.get("chat_max_tokens") is not None:
+        m["max_tokens"] = int(rag_conf["chat_max_tokens"])
+    return m
+
+
 class ChatModelFactory(BaseModelFactory):
     def generator(self) -> Optional[Embeddings | BaseChatModel]:
-        return ChatTongyi(model=rag_conf['chat_model_name'])
+        return ChatTongyi(
+            model=rag_conf["chat_model_name"],
+            model_kwargs=_chat_model_kwargs(),
+        )
 
 
 class EmbeddingModelFactory(BaseModelFactory):

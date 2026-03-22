@@ -4,19 +4,14 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="dfdf981f-5b4d-43c8-9a33-8c11da0dfdb9" name="更改" comment="chore: ignore IDE config files">
-      <change afterPath="$PROJECT_DIR$/eval/golden_regression.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/rag/retrieval_pipeline.py" afterDir="false" />
+    <list default="true" id="dfdf981f-5b4d-43c8-9a33-8c11da0dfdb9" name="更改" comment="feat: add query rewrite and BM25 hybrid retrieval">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/chroma_db/3389132f-3587-40be-a1d9-8a4268ede766/data_level0.bin" beforeDir="false" afterPath="$PROJECT_DIR$/chroma_db/3389132f-3587-40be-a1d9-8a4268ede766/data_level0.bin" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/chroma_db/3389132f-3587-40be-a1d9-8a4268ede766/length.bin" beforeDir="false" afterPath="$PROJECT_DIR$/chroma_db/3389132f-3587-40be-a1d9-8a4268ede766/length.bin" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/chroma_db/chroma.sqlite3" beforeDir="false" afterPath="$PROJECT_DIR$/chroma_db/chroma.sqlite3" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/config/chroma.yml" beforeDir="false" afterPath="$PROJECT_DIR$/config/chroma.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/eval/golden_dataset.json" beforeDir="false" afterPath="$PROJECT_DIR$/eval/golden_dataset.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/eval/run_eval.py" beforeDir="false" afterPath="$PROJECT_DIR$/eval/run_eval.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/prompts/rag_summarize.txt" beforeDir="false" afterPath="$PROJECT_DIR$/prompts/rag_summarize.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/config/rag.yml" beforeDir="false" afterPath="$PROJECT_DIR$/config/rag.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/model/factory.py" beforeDir="false" afterPath="$PROJECT_DIR$/model/factory.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/rag/online_query.py" beforeDir="false" afterPath="$PROJECT_DIR$/rag/online_query.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rag/retrieval_pipeline.py" beforeDir="false" afterPath="$PROJECT_DIR$/rag/retrieval_pipeline.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/utils/logs/agent_20260322.log" beforeDir="false" afterPath="$PROJECT_DIR$/utils/logs/agent_20260322.log" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -253,7 +248,7 @@
       <workItem from="1774009835035" duration="10074000" />
       <workItem from="1774027385003" duration="38000" />
       <workItem from="1774027446415" duration="1631000" />
-      <workItem from="1774164307950" duration="15354000" />
+      <workItem from="1774164307950" duration="18824000" />
     </task>
     <task id="LOCAL-00001" summary="feat: new">
       <option name="closed" value="true" />
@@ -367,7 +362,15 @@
       <option name="project" value="LOCAL" />
       <updated>1774176736733</updated>
     </task>
-    <option name="localTasksCounter" value="15" />
+    <task id="LOCAL-00015" summary="feat: add query rewrite and BM25 hybrid retrieval">
+      <option name="closed" value="true" />
+      <created>1774180195523</created>
+      <option name="number" value="00015" />
+      <option name="presentableId" value="LOCAL-00015" />
+      <option name="project" value="LOCAL" />
+      <updated>1774180195523</updated>
+    </task>
+    <option name="localTasksCounter" value="16" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -398,7 +401,8 @@
     <MESSAGE value="feat: add BGE reranker support for RAG retrieval" />
     <MESSAGE value="feat: update BGE reranker config and endpoint" />
     <MESSAGE value="chore: ignore IDE config files" />
-    <option name="LAST_COMMIT_MESSAGE" value="chore: ignore IDE config files" />
+    <MESSAGE value="feat: add query rewrite and BM25 hybrid retrieval" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat: add query rewrite and BM25 hybrid retrieval" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>

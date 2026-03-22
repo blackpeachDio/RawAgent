@@ -245,3 +245,4 @@
 2026-03-22 19:41:36,154 - agent - INFO - middleware.py:24 - [tool monitor]工具rag_summarize调用成功
 2026-03-22 19:41:36,155 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有3条消息。
 2026-03-22 19:41:36,155 - agent - DEBUG - middleware.py:42 - [log_before_model]ToolMessage | 检查水箱盖是否拧紧、密封圈是否脱落或破损，确认出水管无堵塞，加水不超过刻度线；若漏水仍存在，可调小出水量、避免机器人剧烈晃动，必要时更换破损水箱或密封圈。
+2026-03-22 20:53:22,321 - agent - INFO - online_query.py:37 - [RAG] Chroma persist_directory=D:\project\RawAgent\utils\../chroma_db
