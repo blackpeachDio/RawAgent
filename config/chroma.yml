@@ -6,8 +6,10 @@ fetch_k: 20
 k: 3
 # 是否启用 BGE CrossEncoder 精排（需 sentence-transformers）
 rerank_enabled: true
-# HuggingFace 上的 BGE reranker，如 BAAI/bge-reranker-base、BAAI/bge-reranker-v2-m3、BAAI/bge-reranker-large
-rerank_model: BAAI/bge-reranker-v2-m3
+# 访问 huggingface.co 超时：填镜像（等价于环境变量 HF_ENDPOINT）。国内可试 https://hf-mirror.com
+hf_endpoint: https://hf-mirror.com
+# HuggingFace 模型 id；或已下载到本地的文件夹路径（也可用 ../models/xxx 相对 utils 根）
+rerank_model: BAAI/bge-reranker-base
 # cpu 或 cuda / cuda:0
 rerank_device: cpu
 # 个别模型需 trust_remote_code，一般为 false

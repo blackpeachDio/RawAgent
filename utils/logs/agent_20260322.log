@@ -172,3 +172,26 @@
 31. **水箱漏水怎么办？**
 - 检查水箱盖是否拧紧，出水管是否堵塞，调小出水量，拖地时避免机器人剧烈晃动，更换破损水箱。
 2026-03-22 17:47:03,788 - agent - INFO - online_query.py:33 - [RAG] Chroma persist_directory=D:\project\rawAgent\utils\../chroma_db
+2026-03-22 18:36:03,235 - agent - INFO - online_query.py:34 - [RAG] Chroma persist_directory=D:\project\RawAgent\utils\../chroma_db
+2026-03-22 18:36:10,951 - agent - INFO - online_query.py:78 - [RAG] 精排: BGE CrossEncoder model=BAAI/bge-reranker-base device=cpu | 粗排 fetch_k=20 | 精排 top_n=3
+2026-03-22 18:36:14,872 - agent - INFO - online_query.py:116 - [RAG] 用户问题: 小户型适合哪些扫地机器人 | 【参考资料1】元数据: {'creationdate': '2025-08-06T15:41:17+08:00', 'company': '', 'subject': '', 'page': 3, 'trapped': '/False', 'page_label': '4', 'keywords': '', 'total_pages': 8, 'author': '喵喵', 'moddate': '2025-08-06T15:41:17+08:00', 'sourcemodified': "D:20250806154117+08'00'", 'producer': '', 'title': '', 'comments': '', 'source': 'D:\\project\\RawAgent\\utils\\../data\\扫地机器人100问.pdf', 'creator': 'WPS 文字'} | 正文: ## 五、选购指南类
+### 选购要素
+39. **选购时最应该关注哪些参数？**
+- 导航类型、吸力大小、电池容量、尘盒/水箱容量。
+40. **小户型适合哪种扫地机器人？**
+- 基础激光导航机型即可，如米家 1C、石头 T4。
+41. **大户型应该注意什么？**
+- 选择大电池(>5200mAh)、自动集尘或自动洗拖布机型。
+42. **有宠物的家庭怎么选？**
+2026-03-22 18:36:14,872 - agent - INFO - online_query.py:116 - [RAG] 用户问题: 小户型适合哪些扫地机器人 | 【参考资料2】元数据: {'source': 'D:\\project\\RawAgent\\utils\\../data\\扫地机器人100问2.txt'} | 正文: 71. **租房党、小户型适合什么清扫模式？**
+- 开启“一键清扫”或“迷你清扫”模式，设置定时清扫，每天短时间清扫，保证地面干净。
+72. **机器人可以清理宠物猫砂、狗砂吗？**
+- 可清理轻微散落的猫砂、狗砂，调至大吸力模式，避免大颗粒猫砂卡入滚刷，及时清理尘盒。
+73. **厨房地面有油污怎么清理？**
+2026-03-22 18:36:14,872 - agent - INFO - online_query.py:116 - [RAG] 用户问题: 小户型适合哪些扫地机器人 | 【参考资料3】元数据: {'source': 'D:\\project\\RawAgent\\utils\\../data\\选购指南.txt'} | 正文: 扫地/扫拖一体机器人选购指南200条
+
+1. 选购核心：优先明确使用场景，独居小户型侧重轻便灵活，多口之家带宠物需强化吸力和防缠绕功能。
+
+2. 吸力参数：家用建议选择≥3000Pa吸力机型，地毯场景需≥4000Pa，吸力可调节更适配不同地面。
+
+3. 导航技术：激光导航定位精准、抗干扰强，适合复杂户型；视觉导航性价比高，避免强光环境使用。
