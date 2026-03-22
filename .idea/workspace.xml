@@ -4,14 +4,12 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="dfdf981f-5b4d-43c8-9a33-8c11da0dfdb9" name="更改" comment="test: update agent query and add Chroma db files">
-      <change afterPath="$PROJECT_DIR$/eval/golden_dataset.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/eval/run_eval.py" afterDir="false" />
+    <list default="true" id="dfdf981f-5b4d-43c8-9a33-8c11da0dfdb9" name="更改" comment="feat: add RAG evaluation script and golden dataset">
+      <change afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/chroma_db/3389132f-3587-40be-a1d9-8a4268ede766/data_level0.bin" beforeDir="false" afterPath="$PROJECT_DIR$/chroma_db/3389132f-3587-40be-a1d9-8a4268ede766/data_level0.bin" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/chroma_db/3389132f-3587-40be-a1d9-8a4268ede766/length.bin" beforeDir="false" afterPath="$PROJECT_DIR$/chroma_db/3389132f-3587-40be-a1d9-8a4268ede766/length.bin" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/chroma_db/chroma.sqlite3" beforeDir="false" afterPath="$PROJECT_DIR$/chroma_db/chroma.sqlite3" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/utils/logs/agent_20260322.log" beforeDir="false" afterPath="$PROJECT_DIR$/utils/logs/agent_20260322.log" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/config/chroma.yml" beforeDir="false" afterPath="$PROJECT_DIR$/config/chroma.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rag/online_query.py" beforeDir="false" afterPath="$PROJECT_DIR$/rag/online_query.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -247,7 +245,7 @@
       <workItem from="1774009835035" duration="10074000" />
       <workItem from="1774027385003" duration="38000" />
       <workItem from="1774027446415" duration="1631000" />
-      <workItem from="1774164307950" duration="9371000" />
+      <workItem from="1774164307950" duration="10112000" />
     </task>
     <task id="LOCAL-00001" summary="feat: new">
       <option name="closed" value="true" />
@@ -329,7 +327,15 @@
       <option name="project" value="LOCAL" />
       <updated>1774171984845</updated>
     </task>
-    <option name="localTasksCounter" value="11" />
+    <task id="LOCAL-00011" summary="feat: add RAG evaluation script and golden dataset">
+      <option name="closed" value="true" />
+      <created>1774174159959</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1774174159959</updated>
+    </task>
+    <option name="localTasksCounter" value="12" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -356,7 +362,8 @@
     <MESSAGE value="fix: resolve Chroma persist directory path issues" />
     <MESSAGE value="chore: remove md5 text file" />
     <MESSAGE value="test: update agent query and add Chroma db files" />
-    <option name="LAST_COMMIT_MESSAGE" value="test: update agent query and add Chroma db files" />
+    <MESSAGE value="feat: add RAG evaluation script and golden dataset" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat: add RAG evaluation script and golden dataset" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>

@@ -1,0 +1,2 @@
+# RAG BGE 精排（config/chroma.yml rerank_enabled: true）
+sentence-transformers>=2.2.0

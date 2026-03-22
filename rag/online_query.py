@@ -1,5 +1,6 @@
 """
 在线查询：连接已有 Chroma 索引，检索 + 总结（RAG），供 Agent 工具调用。
+检索：向量粗排（fetch_k）→ 可选 BGE CrossEncoder 精排（top_n = k）→ 拼进 prompt。
 """
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
@@ -38,7 +39,54 @@ class OnlineQueryService:
         )
 
     def get_retriever(self):
-        return self.vector_store.as_retriever(search_kwargs={"k": chroma_conf["k"]})
+        final_k = int(chroma_conf["k"])
+        rerank_on = bool(chroma_conf.get("rerank_enabled", False))
+
+        if not rerank_on:
+            return self.vector_store.as_retriever(search_kwargs={"k": final_k})
+
+        fetch_k = int(chroma_conf.get("fetch_k", max(final_k, 20)))
+        if fetch_k < final_k:
+            logger.warning(
+                "[RAG] fetch_k(%s) < k(%s)，已把 fetch_k 调整为 k",
+                fetch_k,
+                final_k,
+            )
+            fetch_k = final_k
+
+        try:
+            from langchain_classic.retrievers import ContextualCompressionRetriever
+            from langchain_classic.retrievers.document_compressors.cross_encoder_rerank import (
+                CrossEncoderReranker,
+            )
+            from langchain_community.cross_encoders import HuggingFaceCrossEncoder
+        except ImportError as e:
+            raise ImportError(
+                "已启用 BGE 精排：请安装 langchain-classic 与 sentence-transformers"
+            ) from e
+
+        base = self.vector_store.as_retriever(search_kwargs={"k": fetch_k})
+
+        model_name = chroma_conf.get("rerank_model") or "BAAI/bge-reranker-v2-m3"
+        device = str(chroma_conf.get("rerank_device", "cpu"))
+        model_kwargs: dict = {"device": device}
+        if chroma_conf.get("rerank_trust_remote_code"):
+            model_kwargs["trust_remote_code"] = True
+
+        cross = HuggingFaceCrossEncoder(model_name=model_name, model_kwargs=model_kwargs)
+        compressor = CrossEncoderReranker(model=cross, top_n=final_k)
+        logger.info(
+            "[RAG] 精排: BGE CrossEncoder model=%s device=%s | 粗排 fetch_k=%s | 精排 top_n=%s",
+            model_name,
+            device,
+            fetch_k,
+            final_k,
+        )
+
+        return ContextualCompressionRetriever(
+            base_compressor=compressor,
+            base_retriever=base,
+        )
 
 
 class RagSummarizeService(object):

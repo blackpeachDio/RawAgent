@@ -1,6 +1,17 @@
 collection_name: agent # 向量数据库表名
 persist_directory: ../chroma_db #向量数据库文件名
+# 向量粗排从 Chroma 取回的条数；仅当 rerank_enabled 为 true 时生效，应 >= k
+fetch_k: 20
+# 精排后进入 RAG 上下文的条数（CrossEncoder top_n）
 k: 3
+# 是否启用 BGE CrossEncoder 精排（需 sentence-transformers）
+rerank_enabled: true
+# HuggingFace 上的 BGE reranker，如 BAAI/bge-reranker-base、BAAI/bge-reranker-v2-m3、BAAI/bge-reranker-large
+rerank_model: BAAI/bge-reranker-v2-m3
+# cpu 或 cuda / cuda:0
+rerank_device: cpu
+# 个别模型需 trust_remote_code，一般为 false
+rerank_trust_remote_code: false
 data_path: ../data # 数据文件夹
 md5_hex_store: md5.text # 去重记录
 allow_knowledge_file_type: [ "txt", "pdf" ]
