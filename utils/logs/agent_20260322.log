@@ -94,3 +94,14 @@
 2026-03-22 16:59:03,911 - agent - INFO - middleware.py:24 - [tool monitor]工具rag_summarize调用成功
 2026-03-22 16:59:05,428 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有3条消息。
 2026-03-22 16:59:05,429 - agent - DEBUG - middleware.py:42 - [log_before_model]ToolMessage | 小户型适合选择体积小巧、续航适中、具备智能导航和避障功能的扫地机器人。建议优先考虑支持APP控制、扫拖一体、噪音较低且尘盒容量满足日常清洁需求的型号，同时注意机器人的转弯半径是否适合狭窄空间。
+2026-03-22 17:22:59,977 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有1条消息。
+2026-03-22 17:22:59,978 - agent - DEBUG - middleware.py:42 - [log_before_model]HumanMessage | 小户型适合的扫地机器人类型及选购建议
+2026-03-22 17:23:01,262 - agent - INFO - middleware.py:19 - [tool monitor]执行工具：rag_summarize
+2026-03-22 17:23:01,262 - agent - INFO - middleware.py:20 - [tool monitor]传入参数：{'query': '小户型扫地机器人选购建议'}
+2026-03-22 17:23:01,528 - agent - ERROR - middleware.py:31 - 工具rag_summarize调用失败，原因：Error executing plan: Internal error: Error creating hnsw segment reader: Nothing found on disk
+2026-03-22 17:27:12,061 - agent - INFO - online_query.py:38 - [RAG] Chroma persist_directory=D:\project\RawAgent\chroma_db
+2026-03-22 17:27:12,395 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有1条消息。
+2026-03-22 17:27:12,396 - agent - DEBUG - middleware.py:42 - [log_before_model]HumanMessage | 小户型适合的扫地机器人类型及选购建议
+2026-03-22 17:27:14,777 - agent - INFO - middleware.py:19 - [tool monitor]执行工具：rag_summarize
+2026-03-22 17:27:14,778 - agent - INFO - middleware.py:20 - [tool monitor]传入参数：{'query': '小户型 扫地机器人 选购建议'}
+2026-03-22 17:27:15,046 - agent - ERROR - middleware.py:31 - 工具rag_summarize调用失败，原因：Error executing plan: Internal error: Error creating hnsw segment reader: Nothing found on disk
