@@ -18,13 +18,13 @@ rerank_trust_remote_code: false
 # rerank_refuse_min_score: -20.0
 
 # --- 查询改写：多路向量召回合并后再精排（提召回）---
-query_rewrite_enabled: true
+query_rewrite_enabled: false
 query_rewrite_max_variants: 2
 # 合并去重后参与 BGE 打分的最大条数
 merge_max_pool: 60
 
 # --- 混合检索：BM25 与向量结果合并去重后再精排（全库建 BM25，首次略慢）---
-hybrid_bm25_enabled: true
+hybrid_bm25_enabled: false
 
 data_path: ../data # 数据文件夹
 md5_hex_store: md5.text # 去重记录

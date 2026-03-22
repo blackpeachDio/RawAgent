@@ -246,3 +246,28 @@
 2026-03-22 19:41:36,155 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有3条消息。
 2026-03-22 19:41:36,155 - agent - DEBUG - middleware.py:42 - [log_before_model]ToolMessage | 检查水箱盖是否拧紧、密封圈是否脱落或破损，确认出水管无堵塞，加水不超过刻度线；若漏水仍存在，可调小出水量、避免机器人剧烈晃动，必要时更换破损水箱或密封圈。
 2026-03-22 20:53:22,321 - agent - INFO - online_query.py:37 - [RAG] Chroma persist_directory=D:\project\RawAgent\utils\../chroma_db
+2026-03-22 21:04:06,324 - agent - INFO - online_query.py:36 - [RAG] Chroma persist_directory=D:\project\RawAgent\utils\../chroma_db
+2026-03-22 21:04:06,451 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有1条消息。
+2026-03-22 21:04:06,451 - agent - DEBUG - middleware.py:42 - [log_before_model]HumanMessage | 水箱加水后漏水怎么处理
+2026-03-22 21:04:13,082 - agent - INFO - middleware.py:19 - [tool monitor]执行工具：rag_summarize
+2026-03-22 21:04:13,082 - agent - INFO - middleware.py:20 - [tool monitor]传入参数：{'query': '扫拖一体机水箱加水后漏水处理方法'}
+2026-03-22 21:04:16,654 - agent - INFO - retrieval_pipeline.py:29 - [RAG] HF_ENDPOINT=https://hf-mirror.com
+2026-03-22 21:04:27,967 - agent - INFO - online_query.py:83 - [RAG] 用户问题: 扫拖一体机水箱加水后漏水处理方法 | 【参考资料1】元数据: {'source': 'D:\\project\\RawAgent\\utils\\../data\\扫拖一体机器人100问.txt'} | 正文: ### 拖地系统专属类
+11. **水箱加水后漏水怎么处理？**
+- 检查水箱盖是否拧紧、水箱密封圈是否脱落或破损，确认出水管无堵塞，加水至刻度线内，避免过满溢出。
+12. **拖地时出水量过大或过小怎么调节？**
+- 在APP中进入【拖地设置】，一般分低、中、高三档出水量，木地板选低档，瓷砖、水泥地可选中高档。
+13. **水箱没水了机器人会自动停止吗？**
+2026-03-22 21:04:27,967 - agent - INFO - online_query.py:83 - [RAG] 用户问题: 扫拖一体机水箱加水后漏水处理方法 | 【参考资料2】元数据: {'source': 'D:\\project\\RawAgent\\utils\\../data\\维护保养.txt'} | 正文: ## 扫拖一体拖地功能专属维护（40条）
+1. 每次拖地完成后，立即拆卸拖布，用清水冲洗干净，拧干后放在通风处晾干，避免发霉。
+2. 每日清理拖布支架，用软毛刷挑出缠绕的毛发、线头，保证支架干净无杂物。
+3. 每次使用水箱前，检查水箱内无杂质、水垢，加水时用清水，避免自来水直接加注产生水垢。
+4. 拖地完成后，将水箱内剩余的清水排空，用干布擦拭水箱内部和出水口，防止水垢堵塞。
+2026-03-22 21:04:27,967 - agent - INFO - online_query.py:83 - [RAG] 用户问题: 扫拖一体机水箱加水后漏水处理方法 | 【参考资料3】元数据: {'source': 'D:\\project\\RawAgent\\utils\\../data\\扫拖一体机器人100问.txt'} | 正文: - 当APP推送污水仓满溢提醒时，及时倾倒污水，清洗污水仓和过滤网，避免污水回流污染清洁系统。
+22. **清洁仓加水后不出水清洗拖布怎么处理？**
+- 检查清洁仓进水管是否堵塞，确认洗拖布水泵是否正常工作，清理后重启机器人，仍故障联系售后。
+23. **拖布支架松动怎么固定？**
+- 检查支架卡扣是否断裂，若卡扣完好，将支架对准机身卡槽用力按压至“咔哒”声，确认无松动后再使用。
+2026-03-22 21:04:40,056 - agent - INFO - middleware.py:24 - [tool monitor]工具rag_summarize调用成功
+2026-03-22 21:04:40,057 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有3条消息。
+2026-03-22 21:04:40,057 - agent - DEBUG - middleware.py:42 - [log_before_model]ToolMessage | 检查水箱盖是否拧紧、水箱密封圈是否脱落或破损，确认出水管无堵塞，加水至刻度线内，避免过满溢出。
