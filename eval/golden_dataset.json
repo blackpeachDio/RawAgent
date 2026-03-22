@@ -1,0 +1,15 @@
+[
+  {
+    "_comment": "可选：仅作说明，评测脚本会忽略非标准字段。标准字段见 eval/run_eval.py 顶部文档。",
+    "id": "ex1",
+    "question": "小户型适合哪些扫地机器人",
+    "relevant_sources": ["选购指南.txt"],
+    "ground_truth_answer": ""
+  },
+  {
+    "id": "ex2",
+    "question": "水箱加水后漏水怎么处理",
+    "relevant_sources": ["故障排除.txt"],
+    "ground_truth_answer": ""
+  }
+]
