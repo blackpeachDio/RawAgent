@@ -1,2 +1,4 @@
 # JetBrains / PyCharm / IDEA
 .idea/
+chroma_db/
+utils/logs
