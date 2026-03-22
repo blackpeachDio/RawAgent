@@ -64,3 +64,33 @@
 2026-03-22 16:40:04,725 - agent - INFO - middleware.py:24 - [tool monitor]工具rag_summarize调用成功
 2026-03-22 16:40:06,961 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有13条消息。
 2026-03-22 16:40:06,962 - agent - DEBUG - middleware.py:42 - [log_before_model]ToolMessage | 小户型一居室使用扫地机器人时，建议选择体积小巧、转弯半径小的机型，便于在狭窄空间灵活移动；优先考虑具备智能导航和路径规划功能的型号，以提升清洁效率；定期清理尘盒和滚刷，避免因空间小导致灰尘反复扬起；设置虚拟墙或禁区，防止机器人频繁碰撞家具；充电座应放置在开阔位置，确保机器人顺利回充。
+2026-03-22 16:52:30,036 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有1条消息。
+2026-03-22 16:52:30,037 - agent - DEBUG - middleware.py:42 - [log_before_model]HumanMessage | 扫地机器人如何实现自主导航的
+2026-03-22 16:52:32,407 - agent - INFO - middleware.py:19 - [tool monitor]执行工具：rag_summarize
+2026-03-22 16:52:32,408 - agent - INFO - middleware.py:20 - [tool monitor]传入参数：{'query': '扫地机器人自主导航技术原理'}
+2026-03-22 16:52:35,582 - agent - INFO - middleware.py:24 - [tool monitor]工具rag_summarize调用成功
+2026-03-22 16:52:37,474 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有3条消息。
+2026-03-22 16:52:37,474 - agent - DEBUG - middleware.py:42 - [log_before_model]ToolMessage | 扫地机器人自主导航技术主要依赖传感器获取环境信息，并结合算法实现定位与路径规划。常见技术包括激光雷达（LDS）扫描构建地图、视觉识别辅助定位，以及同步定位与地图构建（SLAM）算法，通过实时处理传感器数据，确定自身位置并规划高效清扫路径。
+2026-03-22 16:53:13,127 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有1条消息。
+2026-03-22 16:53:13,128 - agent - DEBUG - middleware.py:42 - [log_before_model]HumanMessage | 尘盒过滤系统有哪几种类型？
+2026-03-22 16:53:21,282 - agent - INFO - middleware.py:19 - [tool monitor]执行工具：rag_summarize
+2026-03-22 16:53:21,282 - agent - INFO - middleware.py:20 - [tool monitor]传入参数：{'query': '尘盒过滤系统类型'}
+2026-03-22 16:53:22,791 - agent - INFO - middleware.py:24 - [tool monitor]工具rag_summarize调用成功
+2026-03-22 16:53:23,264 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有3条消息。
+2026-03-22 16:53:23,265 - agent - DEBUG - middleware.py:42 - [log_before_model]ToolMessage | 尘盒过滤系统类型包括初级过滤、HEPA过滤和多层复合过滤。
+2026-03-22 16:53:58,601 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有1条消息。
+2026-03-22 16:53:58,602 - agent - DEBUG - middleware.py:42 - [log_before_model]HumanMessage | 有宠物的家庭怎么选？
+2026-03-22 16:54:04,402 - agent - INFO - middleware.py:19 - [tool monitor]执行工具：rag_summarize
+2026-03-22 16:54:04,402 - agent - INFO - middleware.py:20 - [tool monitor]传入参数：{'query': '有宠物的家庭如何选择扫地机器人'}
+2026-03-22 16:54:08,823 - agent - INFO - middleware.py:24 - [tool monitor]工具rag_summarize调用成功
+2026-03-22 16:54:09,801 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有3条消息。
+2026-03-22 16:54:09,802 - agent - DEBUG - middleware.py:42 - [log_before_model]ToolMessage | 有宠物的家庭应选择具备强吸力、防缠绕设计、大尘盒容量以及智能避障功能的扫地机器人，以有效清理宠物毛发并避免被宠物干扰或损坏。
+2026-03-22 16:58:44,877 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有1条消息。
+2026-03-22 16:58:44,877 - agent - DEBUG - middleware.py:42 - [log_before_model]HumanMessage | 你好？
+2026-03-22 16:58:58,945 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有1条消息。
+2026-03-22 16:58:58,945 - agent - DEBUG - middleware.py:42 - [log_before_model]HumanMessage | 小户型适合哪些扫地机器人
+2026-03-22 16:59:00,778 - agent - INFO - middleware.py:19 - [tool monitor]执行工具：rag_summarize
+2026-03-22 16:59:00,778 - agent - INFO - middleware.py:20 - [tool monitor]传入参数：{'query': '小户型适合的扫地机器人类型及选购建议'}
+2026-03-22 16:59:03,911 - agent - INFO - middleware.py:24 - [tool monitor]工具rag_summarize调用成功
+2026-03-22 16:59:05,428 - agent - INFO - middleware.py:40 - [log_before_model]即将调用模型，带有3条消息。
+2026-03-22 16:59:05,429 - agent - DEBUG - middleware.py:42 - [log_before_model]ToolMessage | 小户型适合选择体积小巧、续航适中、具备智能导航和避障功能的扫地机器人。建议优先考虑支持APP控制、扫拖一体、噪音较低且尘盒容量满足日常清洁需求的型号，同时注意机器人的转弯半径是否适合狭窄空间。

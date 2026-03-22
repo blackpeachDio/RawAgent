@@ -8,6 +8,7 @@ from langchain_core.prompts import PromptTemplate
 
 from model.factory import chat_model, embedding_model
 from utils.config_utils import chroma_conf
+from utils.log_utils import logger
 from utils.prompt_utils import load_rag_prompts
 
 
@@ -56,7 +57,17 @@ class RagSummarizeService(object):
         counter = 0
         for doc in context_docs:
             counter += 1
+            logger.info(
+                "[RAG] 用户问题: %s | 【参考资料%d】元数据: %s | 正文: %s",
+                query,
+                counter,
+                doc.metadata,
+                doc.page_content,
+            )
             context += f"【参考资料{counter}】: 参考资料：{doc.page_content} | 参考元数据：{doc.metadata}\n"
+
+        if not context_docs:
+            logger.warning("[RAG] 未检索到任何片段，context 为空 | 用户问题: %s", query)
 
         return self.chain.invoke(
             {
