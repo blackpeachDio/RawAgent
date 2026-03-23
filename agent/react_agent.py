@@ -5,11 +5,11 @@ React Agent：支持多轮 messages；流式输出。
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage
 
-from agent.memory_utils import trim_conversation_messages, validate_chat_messages
 from agent.tools.agent_tools import *
 from agent.tools.middleware import *
 from model.factory import chat_model
 from utils.config_utils import agent_conf
+from utils.memory_utils import trim_conversation_messages, validate_chat_messages
 
 
 class ReactAgent:
@@ -48,7 +48,7 @@ class ReactAgent:
 
         prev_assistant_text = ""
         for chunk in self.agent.stream(
-            input_dict, stream_mode="values", context={"report": False}
+                input_dict, stream_mode="values", context={"report": False}
         ):
             raw_msgs = chunk.get("messages") or []
             if not raw_msgs:
@@ -61,9 +61,9 @@ class ReactAgent:
                 continue
             # 增量：适配「内容逐步变长」的流式 AIMessage
             if len(text) > len(prev_assistant_text) and text.startswith(
-                prev_assistant_text
+                    prev_assistant_text
             ):
-                delta = text[len(prev_assistant_text) :]
+                delta = text[len(prev_assistant_text):]
                 prev_assistant_text = text
                 if delta:
                     yield delta
