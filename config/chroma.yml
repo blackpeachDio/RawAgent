@@ -5,7 +5,7 @@ fetch_k: 20
 # 精排后进入 RAG 上下文的条数（CrossEncoder top_n）
 k: 3
 # 是否启用 BGE CrossEncoder 精排（需 sentence-transformers）
-rerank_enabled: true
+rerank_enabled: false
 # 访问 huggingface.co 超时：填镜像（等价于环境变量 HF_ENDPOINT）。国内可试 https://hf-mirror.com
 hf_endpoint: https://hf-mirror.com
 # HuggingFace 模型 id；或已下载到本地的文件夹路径（也可用 ../models/xxx 相对 utils 根）

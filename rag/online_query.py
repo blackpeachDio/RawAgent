@@ -119,12 +119,27 @@ class RagSummarizeService(object):
         except Exception as e:
             logger.warning("[RAG] 打印 prompt 失败：%s", str(e))
 
-        return self.chain.invoke(
+        result = self.chain.invoke(
             {
                 "input": query,
                 "context": context,
             }
         )
+
+        # 打印 rag_summarize 最终总结结果，便于排查“模型是怎么基于参考资料输出的”
+        try:
+            full, max_chars = get_prompt_log_config()
+            truncated = maybe_truncate(str(result), full=full, max_chars=max_chars)
+            log_truncated_block(
+                logger,
+                "[RAG_RESULT_BEGIN]",
+                "[RAG_RESULT_END]",
+                truncated,
+            )
+        except Exception as e:
+            logger.debug("[RAG] 打印结果失败：%s", str(e))
+
+        return result
 
 
 if __name__ == "__main__":
