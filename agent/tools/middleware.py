@@ -7,6 +7,7 @@ from langchain_core.messages import ToolMessage
 from langgraph.runtime import Runtime
 from langgraph.types import Command
 from utils.log_utils import logger
+from utils.prompt_log_utils import format_messages_as_prompt_text, get_prompt_log_config, maybe_truncate, log_truncated_block
 
 
 @wrap_tool_call
@@ -39,7 +40,15 @@ def log_before_model(
 ):         # 在模型执行前输出日志
     logger.info(f"[log_before_model]即将调用模型，带有{len(state['messages'])}条消息。")
 
-    logger.debug(f"[log_before_model]{type(state['messages'][-1]).__name__} | {state['messages'][-1].content.strip()}")
+    full, max_chars = get_prompt_log_config()
+
+    try:
+        msg_list = state.get("messages") or []
+        truncate_fn = lambda s: maybe_truncate(s, full=full, max_chars=max_chars)
+        prompt_text = format_messages_as_prompt_text(msg_list, truncate_fn=truncate_fn)
+        log_truncated_block(logger, "[PROMPT_BEGIN]", "[PROMPT_END]", prompt_text)
+    except Exception as e:
+        logger.warning("[log_before_model]打印 prompt 失败：%s", str(e))
 
     return None
 

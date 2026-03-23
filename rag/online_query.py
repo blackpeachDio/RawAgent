@@ -14,6 +14,7 @@ from utils.config_utils import chroma_conf
 from utils.log_utils import logger
 from utils.path_utils import get_abs_path
 from utils.prompt_utils import load_rag_prompts
+from utils.prompt_log_utils import get_prompt_log_config, maybe_truncate, log_truncated_block
 
 
 def _chroma_persist_directory() -> str:
@@ -88,6 +89,35 @@ class RagSummarizeService(object):
                 doc.page_content,
             )
             context += f"【参考资料{counter}】: 参考资料：{doc.page_content} | 参考元数据：{doc.metadata}\n"
+
+        try:
+            # 打印“提交给大模型”的 rag_summarize prompt 细节（便于排查/对齐）。
+            full, max_chars = get_prompt_log_config()
+            _maybe_truncate = lambda s: maybe_truncate(s, full=full, max_chars=max_chars)
+
+            prompt_text = None
+            try:
+                # langchain PromptTemplate 通常支持 format(**kwargs)
+                prompt_text = self.prompt_template.format(input=query, context=context)
+            except Exception:
+                prompt_text = None
+
+            if prompt_text:
+                log_truncated_block(
+                    logger,
+                    "[RAG_PROMPT_BEGIN]",
+                    "[RAG_PROMPT_END]",
+                    _maybe_truncate(str(prompt_text)),
+                )
+            else:
+                log_truncated_block(
+                    logger,
+                    "[RAG_PROMPT_BEGIN]",
+                    "[RAG_PROMPT_END]",
+                    f"input={_maybe_truncate(str(query))}\ncontext={_maybe_truncate(str(context))}",
+                )
+        except Exception as e:
+            logger.warning("[RAG] 打印 prompt 失败：%s", str(e))
 
         return self.chain.invoke(
             {

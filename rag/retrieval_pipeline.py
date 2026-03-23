@@ -117,7 +117,41 @@ def get_cached_cross_encoder():
         cand = get_abs_path(model_raw)
         model_name = cand if os.path.isdir(cand) else model_raw
 
-    device = str(chroma_conf.get("rerank_device", "cpu"))
+    # 设备选择
+    requested_device = str(chroma_conf.get("rerank_device", "cpu"))
+    device = requested_device
+    if requested_device.startswith("cuda"):
+        # 部分环境的 torch 未编译 CUDA 时，强行把模型 device 设为 cuda 会触发
+        # `AssertionError: Torch not compiled with CUDA enabled`。
+        try:
+            import torch
+
+            cuda_built = False
+            try:
+                cuda_built = bool(torch.backends.cuda.is_built)
+            except Exception:
+                cuda_built = False
+
+            cuda_available = False
+            try:
+                cuda_available = bool(torch.cuda.is_available())
+            except Exception:
+                cuda_available = False
+
+            if not cuda_built or not cuda_available:
+                logger.warning(
+                    "[RAG] rerank_device=%s 但 CUDA不可用（built=%s available=%s），回退到 cpu",
+                    requested_device,
+                    cuda_built,
+                    cuda_available,
+                )
+                device = "cpu"
+        except Exception as e:
+            logger.warning(
+                "[RAG] 检测 CUDA 是否可用失败：%s，回退到 cpu", str(e)
+            )
+            device = "cpu"
+
     model_kwargs: dict = {"device": device}
     if chroma_conf.get("rerank_trust_remote_code"):
         model_kwargs["trust_remote_code"] = True
