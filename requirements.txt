@@ -1,3 +1,5 @@
+langchain-community
+langchain-chroma
 contextvars
 langgraph
 langchain-core
