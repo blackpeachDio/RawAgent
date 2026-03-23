@@ -37,13 +37,13 @@ class ReactAgent:
         Yields:
             str: 本轮助手回复的增量文本片段（拼接后与最终回复一致）。
         """
-        validate_chat_messages(messages)
+        validate_chat_messages(messages) # 校验消息的数据结构
         if not messages:
             raise ValueError("messages 不能为空")
         if messages[-1].get("role") != "user":
             raise ValueError("messages 最后一条须为 user")
 
-        trimmed = trim_conversation_messages(messages, self._max_messages)
+        trimmed = trim_conversation_messages(messages, self._max_messages) # 简易实现消息窗口，控制token
         input_dict = {"messages": trimmed}
 
         prev_assistant_text = ""
