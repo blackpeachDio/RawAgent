@@ -9,7 +9,9 @@ rerank_enabled: true
 # 访问 huggingface.co 超时：填镜像（等价于环境变量 HF_ENDPOINT）。国内可试 https://hf-mirror.com
 hf_endpoint: https://hf-mirror.com
 # HuggingFace 模型 id；或已下载到本地的文件夹路径（也可用 ../models/xxx 相对 utils 根）
-rerank_model: BAAI/bge-reranker-base
+rerank_model: ../models/bge-reranker-base
+#rerank_model: BAAI/bge-reranker-base
+
 # cpu 或 cuda / cuda:0
 rerank_device: cpu
 # 个别模型需 trust_remote_code，一般为 false
