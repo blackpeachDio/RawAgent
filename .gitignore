@@ -2,3 +2,4 @@
 .idea/
 chroma_db/
 utils/logs
+config/api.yml
