@@ -3,4 +3,4 @@
 chroma_db/
 utils/logs
 config/api.yml
-models/bge-reranker-base
+models/bge-reranker-base/*
