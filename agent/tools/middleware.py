@@ -47,15 +47,15 @@ def log_before_model(
     except Exception as e:
         logger.warning("[agent_llm] token 估算失败: %s", e)
 
-    full, max_chars = get_prompt_log_config()
-
-    try:
-        msg_list = state.get("messages") or []
-        truncate_fn = lambda s: maybe_truncate(s, full=full, max_chars=max_chars)
-        prompt_text = format_messages_as_prompt_text(msg_list, truncate_fn=truncate_fn)
-        log_truncated_block(logger, "[PROMPT_BEGIN]", "[PROMPT_END]", prompt_text)
-    except Exception as e:
-        logger.warning("[log_before_model]打印 prompt 失败：%s", str(e))
+    # full, max_chars = get_prompt_log_config()
+    #
+    # try:
+    #     msg_list = state.get("messages") or []
+    #     truncate_fn = lambda s: maybe_truncate(s, full=full, max_chars=max_chars)
+    #     prompt_text = format_messages_as_prompt_text(msg_list, truncate_fn=truncate_fn)
+    #     log_truncated_block(logger, "[PROMPT_BEGIN]", "[PROMPT_END]", prompt_text)
+    # except Exception as e:
+    #     logger.warning("[log_before_model]打印 prompt 失败：%s", str(e))
 
     return None
 

@@ -95,27 +95,6 @@ class RagSummarizeService(object):
             full, max_chars = get_prompt_log_config()
             _maybe_truncate = lambda s: maybe_truncate(s, full=full, max_chars=max_chars)
 
-            prompt_text = None
-            try:
-                # langchain PromptTemplate 通常支持 format(**kwargs)
-                prompt_text = self.prompt_template.format(input=query, context=context)
-            except Exception:
-                prompt_text = None
-
-            if prompt_text:
-                log_truncated_block(
-                    logger,
-                    "[RAG_PROMPT_BEGIN]",
-                    "[RAG_PROMPT_END]",
-                    _maybe_truncate(str(prompt_text)),
-                )
-            else:
-                log_truncated_block(
-                    logger,
-                    "[RAG_PROMPT_BEGIN]",
-                    "[RAG_PROMPT_END]",
-                    f"input={_maybe_truncate(str(query))}\ncontext={_maybe_truncate(str(context))}",
-                )
         except Exception as e:
             logger.warning("[RAG] 打印 prompt 失败：%s", str(e))
 
