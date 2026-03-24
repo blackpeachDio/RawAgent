@@ -5,11 +5,13 @@ React Agent：支持多轮 messages；流式输出。
 """
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage
+from langgraph.errors import GraphRecursionError
 
 from agent.tools.agent_tools import *
 from agent.tools.middleware import *
 from model.factory import chat_model
 from utils.config_utils import agent_conf
+from utils.log_utils import logger
 from utils.memory_utils import trim_conversation_messages, validate_chat_messages
 
 
@@ -57,6 +59,7 @@ class ReactAgent:
             middleware=[monitor_tool, log_before_model, build_system_prompt],
         )
         self._max_messages = int(agent_conf.get("conversation_max_messages", 40))
+        self._recursion_limit = int(agent_conf.get("agent_recursion_limit", 40))
 
     def execute_stream(self, messages: list[dict], user_id: str | None = None):
         """
@@ -83,31 +86,47 @@ class ReactAgent:
             query = (messages[-1].get("content") or "").strip()
             context.update(_inject_memory_context(user_id, query))
 
+        run_config = {"recursion_limit": self._recursion_limit}
         prev_assistant_text = ""
-        for chunk in self.agent.stream(
-                input_dict, stream_mode="values", context=context
-        ):
-            raw_msgs = chunk.get("messages") or []
-            if not raw_msgs:
-                continue
-            latest = raw_msgs[-1]
-            if not isinstance(latest, AIMessage):
-                continue
-            text = (latest.content or "").strip()
-            if not text:
-                continue
-            # 增量：适配「内容逐步变长」的流式 AIMessage
-            if len(text) > len(prev_assistant_text) and text.startswith(
-                    prev_assistant_text
-            ):
-                delta = text[len(prev_assistant_text):]
-                prev_assistant_text = text
-                if delta:
-                    yield delta
-            elif text != prev_assistant_text:
-                # 非前缀增长时退化为整段输出一次
-                prev_assistant_text = text
-                yield text + ("\n" if not text.endswith("\n") else "")
+        try:
+            stream_iter = self.agent.stream(
+                input_dict,
+                stream_mode="values",
+                context=context,
+                config=run_config,
+            )
+            for chunk in stream_iter:
+                raw_msgs = chunk.get("messages") or []
+                if not raw_msgs:
+                    continue
+                latest = raw_msgs[-1]
+                if not isinstance(latest, AIMessage):
+                    continue
+                text = (latest.content or "").strip()
+                if not text:
+                    continue
+                # 增量：适配「内容逐步变长」的流式 AIMessage
+                if len(text) > len(prev_assistant_text) and text.startswith(
+                        prev_assistant_text
+                ):
+                    delta = text[len(prev_assistant_text):]
+                    prev_assistant_text = text
+                    if delta:
+                        yield delta
+                elif text != prev_assistant_text:
+                    # 非前缀增长时退化为整段输出一次
+                    prev_assistant_text = text
+                    yield text + ("\n" if not text.endswith("\n") else "")
+        except GraphRecursionError as e:
+            logger.warning(
+                "[agent] 已达图执行步数上限 agent_recursion_limit=%s: %s",
+                self._recursion_limit,
+                e,
+            )
+            yield (
+                "\n\n[提示] 本轮智能体推理步数已达上限，已停止。"
+                "若问题较复杂，可拆成更短的问题分步提问，或在配置中适当调大 agent_recursion_limit。"
+            )
 
 
 if __name__ == "__main__":
