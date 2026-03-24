@@ -11,7 +11,7 @@ from typing import Any
 
 import tiktoken
 
-from utils.prompt_utils import load_report_prompts, load_system_prompts
+from utils.prompt_utils import format_memory_system_prompt, load_report_prompts, load_system_prompts
 
 _encoding: tiktoken.Encoding | None = None
 
@@ -58,12 +58,7 @@ def build_agent_llm_input_text_for_token_estimate(state: Any, runtime: Any) -> s
     base = load_report_prompts() if is_report else load_system_prompts()
     memory = (ctx.get("memory") or "").strip()
     if memory:
-        system = f"""【用户记忆】
-{memory}
-
----
-
-{base}"""
+        system = format_memory_system_prompt(memory, base)
     else:
         system = base
 

@@ -1,6 +1,6 @@
 from utils.config_utils import prompts_conf
-from utils.path_utils import get_abs_path
 from utils.log_utils import logger
+from utils.path_utils import get_abs_path
 
 
 def load_system_prompts():
@@ -44,6 +44,7 @@ def load_report_prompts():
         logger.error(f"[load_report_prompts]解析报告生成提示词出错，{str(e)}")
         raise e
 
+
 def load_judge_prompts():
     try:
         judge_prompt_path = get_abs_path(prompts_conf["judge_prompt_path"])
@@ -71,6 +72,30 @@ def load_mem_extract_prompts():
         raise
 
 
+def load_mem_inject_prompts() -> str:
+    """拼接「用户记忆」与主 system 的模板，占位符：{memory}、{base}。"""
+    try:
+        prompt_path = prompts_conf.get("mem_inject_prompt_path", "../prompts/mem_inject_prompt.txt")
+        path = get_abs_path(prompt_path)
+    except KeyError:
+        path = get_abs_path("../prompts/mem_inject_prompt.txt")
+    try:
+        return open(path, "r", encoding="utf-8").read()
+    except Exception as e:
+        logger.error("[load_mem_inject_prompts] 解析出错: %s", e)
+        raise
+
+
+_mem_inject_template: str | None = None
+
+
+def format_memory_system_prompt(memory: str, base: str) -> str:
+    """将记忆与主提示词按模板拼成完整 system 文本。"""
+    global _mem_inject_template
+    if _mem_inject_template is None:
+        _mem_inject_template = load_mem_inject_prompts()
+    return _mem_inject_template.format(memory=memory, base=base)
+
+
 if __name__ == '__main__':
     print(load_report_prompts())
-

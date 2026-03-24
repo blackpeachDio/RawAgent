@@ -1,5 +1,5 @@
 from typing import Callable
-from utils.prompt_utils import load_system_prompts, load_report_prompts
+from utils.prompt_utils import format_memory_system_prompt, load_report_prompts, load_system_prompts
 from langchain.agents import AgentState
 from langchain.agents.middleware import wrap_tool_call, before_model, dynamic_prompt, ModelRequest
 from langchain.tools.tool_node import ToolCallRequest
@@ -69,13 +69,8 @@ def build_system_prompt(request: ModelRequest):
     else:
         base = load_system_prompts()
 
-    # 注入长期记忆（摘要、画像等），供模型参考
+    # 注入长期记忆（摘要、画像等），供模型参考（模板见 prompts/mem_inject_prompt.txt）
     memory = request.runtime.context.get("memory", "").strip()
     if memory:
-        return f"""【用户记忆】
-{memory}
-
----
-
-{base}"""
+        return format_memory_system_prompt(memory, base)
     return base
