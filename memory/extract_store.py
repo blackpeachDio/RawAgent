@@ -102,7 +102,12 @@ def extract_and_store(user_id: str, user_msg: str, assistant_msg: str) -> None:
     facts, events = _extract_facts_and_events(conversation)
     if facts or events:
         _store_extracted(user_id, facts, events)
-        logger.info("[Memory] 提取完成 user_id=%s facts=%d events=%d", user_id, len(facts), len(events))
+        logger.info(
+            "[Memory] 提取完成 user_id=%s facts=%s events=%d",
+            user_id,
+            json.dumps(facts, ensure_ascii=False),
+            len(events),
+        )
     else:
         logger.debug("[Memory] 本轮无可用提取 user_id=%s", user_id)
 
