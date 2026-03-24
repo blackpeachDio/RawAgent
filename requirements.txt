@@ -9,3 +9,7 @@ streamlit
 sentence-transformers>=2.2.0
 # 混合检索 BM25（hybrid_bm25_enabled: true）
 rank-bm25>=0.2.2
+
+# MCP（Model Context Protocol）示例服务器依赖：用于学习 Cursor MCP 工具调用
+mcp>=1.2.0,<2.0.0
+click>=8.1.0

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "rawagent-learn-mcp-tools": {
+      "command": "python",
+      "args": ["mcp_servers/learn_mcp_tools/server.py", "--transport", "stdio"]
+    }
+  }
+}
+
