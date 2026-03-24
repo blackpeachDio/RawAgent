@@ -39,7 +39,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from agent.react_agent import ReactAgent
-from eval.llm_judge import llm_answer_score
+from eval.judge.llm_judge import llm_answer_score
 from model.factory import chat_model
 
 

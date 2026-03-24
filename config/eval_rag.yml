@@ -1,0 +1,11 @@
+# RAGAS 离线评测（eval/ragas_rag_eval.py）
+# 金标数据：JSON 数组，字段见 data/rag_eval_gold.json
+
+gold_dataset_path: ../data/rag_eval_gold.json
+
+# 启用的指标名称（与 ragas.metrics 中一致，见 eval/ragas_rag_eval.py 顶部说明）
+metrics:
+  - faithfulness
+  - answer_relevancy
+  - context_precision
+  - context_recall
