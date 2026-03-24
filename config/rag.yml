@@ -1,5 +1,5 @@
 chat_model_name: qwen3-max
 embedding_model_name: text-embedding-v4
 # chat_model（含 Agent、RAG）的生成参数，经 model_kwargs 传给 DashScope
-chat_temperature: 0.2
-chat_max_tokens: 2048
+chat_temperature: 0
+chat_max_tokens: 2048 # 模型输出最大token

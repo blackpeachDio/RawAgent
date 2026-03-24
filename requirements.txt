@@ -1,3 +1,4 @@
+tiktoken>=0.7.0
 langchain-community
 langchain-chroma
 contextvars

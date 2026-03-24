@@ -8,6 +8,7 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command
 from utils.log_utils import logger
 from utils.prompt_log_utils import format_messages_as_prompt_text, get_prompt_log_config, maybe_truncate, log_truncated_block
+from utils.token_utils import count_agent_llm_input_tokens
 
 
 @wrap_tool_call
@@ -39,6 +40,12 @@ def log_before_model(
         runtime: Runtime,           # 记录了整个执行过程中的上下文信息
 ):         # 在模型执行前输出日志
     logger.info(f"[log_before_model]即将调用模型，带有{len(state['messages'])}条消息。")
+
+    try:
+        n_in = count_agent_llm_input_tokens(state, runtime)
+        logger.info("[agent_llm] 输入 token 估算（cl100k_base 近似，供成本参考）: %d", n_in)
+    except Exception as e:
+        logger.warning("[agent_llm] token 估算失败: %s", e)
 
     full, max_chars = get_prompt_log_config()
 
