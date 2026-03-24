@@ -58,6 +58,19 @@ def load_judge_prompts():
         raise e
 
 
+def load_mem_extract_prompts():
+    try:
+        prompt_path = prompts_conf.get("mem_extract_prompt_path", "../prompts/mem_extract_prompt.txt")
+        path = get_abs_path(prompt_path)
+    except KeyError:
+        path = get_abs_path("../prompts/mem_extract_prompt.txt")
+    try:
+        return open(path, "r", encoding="utf-8").read()
+    except Exception as e:
+        logger.error("[load_mem_extract_prompts] 解析记忆提取提示词出错: %s", e)
+        raise
+
+
 if __name__ == '__main__':
     print(load_report_prompts())
 

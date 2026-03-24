@@ -1,8 +1,8 @@
 """
-模型用长期记忆：历史摘要、用户画像等事实性个性化数据。
+向量长期记忆：仅存经验、对话摘要、事件（可追加）。
 
+事实性记忆（hobby、name、偏好等）由 FactualStore 热插拔存储，不在此。
 使用独立 Chroma 存储，与 RAG 知识库（chroma_db）区分。
-支持：事实更新（同 fact_key 覆盖旧值）。
 """
 from __future__ import annotations
 
@@ -42,44 +42,23 @@ class ChromaMemoryStore:
             user_id: str,
             content: str,
             memory_type: str = "summary",
-            fact_key: str | None = None,
             **metadata: str,
     ) -> None:
         """
-        添加记忆片段（摘要、画像、事实等）。
-
-        事实更新：当 fact_key 存在时（如 hobby、city），会先删除该用户下同 key 的旧事实再插入，避免「喜欢苹果」「喜欢香蕉」并存。
+        添加向量记忆（经验、对话摘要、事件），可追加。
 
         Args:
             user_id: 用户标识
             content: 文本内容
-            memory_type: summary | profile | fact
-            fact_key: 事实维度标识（如 hobby、city、preference），仅用于 fact 类型；有值时先删除同 key 旧事实
+            memory_type: summary（对话摘要）| experience（经验）| event（事件）
             **metadata: 额外元数据
         """
-        # 事实更新：同 fact_key 覆盖旧值（仅 fact 类型）
-        if fact_key and memory_type == "fact":
-            self._delete_by_fact_key(user_id, fact_key)
-
+        if memory_type not in ("summary", "experience", "event"):
+            logger.warning("[Memory] 非预期 memory_type=%s，使用 summary", memory_type)
+            memory_type = "summary"
         meta = {"user_id": user_id, "memory_type": memory_type, **metadata}
-        if fact_key:
-            meta["fact_key"] = fact_key
         doc = Document(page_content=content, metadata=meta)
         self._store.add_documents([doc])
-
-    def _delete_by_fact_key(self, user_id: str, fact_key: str) -> None:
-        """删除该用户下同 fact_key 的旧事实。"""
-        where = {
-            "$and": [
-                {"user_id": {"$eq": user_id}},
-                {"memory_type": {"$eq": "fact"}},
-                {"fact_key": {"$eq": fact_key}},
-            ]
-        }
-        try:
-            self._store.delete(where=where)  # type: ignore[arg-type]
-        except Exception as e:
-            logger.warning("[Memory] 删除旧事实失败 user_id=%s fact_key=%s: %s", user_id, fact_key, e)
 
     def get_relevant(
             self,

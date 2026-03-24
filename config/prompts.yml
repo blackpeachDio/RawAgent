@@ -2,3 +2,4 @@ main_prompt_path: ../prompts/main_prompt.txt #主提示词
 rag_summarize_prompt_path: ../prompts/rag_summarize.txt #总结
 report_prompt_path: ../prompts/report_prompt.txt #报告
 judge_prompt_path: ../prompts/judge_prompt.txt #幻觉裁判
+mem_extract_prompt_path: ../prompts/mem_extract_prompt.txt #记忆提取（事实+事件）

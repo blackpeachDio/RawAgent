@@ -14,15 +14,29 @@ from utils.memory_utils import trim_conversation_messages, validate_chat_message
 
 
 def _inject_memory_context(user_id: str, query: str) -> dict:
-    """按 user_id 与当前问题检索模型用记忆（摘要、画像），注入 context。"""
+    """按 user_id 注入：事实性画像（FactualStore）+ 向量记忆（经验/摘要/事件）。"""
+    parts: list[str] = []
     try:
-        from memory.chroma_memory import get_memory_store
+        # 1. 事实性记忆（hobby、name、偏好等，覆盖更新）
+        from memory.factual_store import get_factual_store
 
-        memory_parts = get_memory_store().get_relevant(user_id, query, k=5)
-        if memory_parts:
-            return {"memory": "\n".join(memory_parts)}
+        factual = get_factual_store().get_all(user_id)
+        if factual:
+            lines = [f"{k}: {v}" for k, v in sorted(factual.items())]
+            parts.append("【用户画像】\n" + "\n".join(lines))
     except Exception:
         pass
+    try:
+        # 2. 向量记忆（经验、对话摘要、事件）
+        from memory.chroma_memory import get_memory_store
+
+        vector_parts = get_memory_store().get_relevant(user_id, query, k=5)
+        if vector_parts:
+            parts.append("【经验与摘要】\n" + "\n".join(vector_parts))
+    except Exception:
+        pass
+    if parts:
+        return {"memory": "\n\n".join(parts)}
     return {}
 
 
