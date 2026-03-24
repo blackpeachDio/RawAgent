@@ -1,5 +1,9 @@
-collection_name: agent # 向量数据库表名
-persist_directory: ../chroma_db #向量数据库文件名
+collection_name: agent # 向量数据库表名（RAG 知识库）
+persist_directory: ../chroma_db # RAG 向量库目录
+
+# --- 长期记忆（模型用：历史摘要、用户画像等，与 RAG 分离）---
+memory_collection_name: user_memory
+memory_persist_directory: ../chroma_memory_db
 # 向量粗排从 Chroma 取回的条数；仅当 rerank_enabled 为 true 时生效，应 >= k
 fetch_k: 20
 # 精排后进入 RAG 上下文的条数（CrossEncoder top_n）

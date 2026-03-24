@@ -1,6 +1,8 @@
 # JetBrains / PyCharm / IDEA
 .idea/
 chroma_db/
+chroma_memory_db/
+history/
 utils/logs
 config/api.yml
 models/bge-reranker-base/*

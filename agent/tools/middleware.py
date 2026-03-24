@@ -53,10 +53,22 @@ def log_before_model(
     return None
 
 
-@dynamic_prompt                 # 每一次在生成提示词之前，调用此函数
-def report_prompt_switch(request: ModelRequest):     # 动态切换提示词
+@dynamic_prompt
+def build_system_prompt(request: ModelRequest):
+    """根据 context 动态构建 system prompt：报告/主流程切换 + 用户记忆注入。"""
     is_report = request.runtime.context.get("report", False)
     if is_report:               # 是报告生成场景，返回报告生成提示词内容
-        return load_report_prompts()
+        base = load_report_prompts()
+    else:
+        base = load_system_prompts()
 
-    return load_system_prompts()
+    # 注入长期记忆（摘要、画像等），供模型参考
+    memory = request.runtime.context.get("memory", "").strip()
+    if memory:
+        return f"""【用户记忆】
+{memory}
+
+---
+
+{base}"""
+    return base
