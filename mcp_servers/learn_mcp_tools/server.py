@@ -28,7 +28,7 @@ def _build_tools() -> list[types.Tool]:
             name="get_current_time",
             title="Get Current Time",
             description="返回当前时间字符串；可选 timezone。",
-            input_schema={
+            inputSchema={
                 "type": "object",
                 "properties": {
                     "timezone": {
@@ -42,7 +42,7 @@ def _build_tools() -> list[types.Tool]:
             name="echo",
             title="Echo",
             description="原样返回输入文本（用于验证工具调用链路是否通畅）。",
-            input_schema={
+            inputSchema={
                 "type": "object",
                 "required": ["text"],
                 "properties": {
