@@ -1,5 +1,12 @@
 external_data_path: ../data/external/records.csv
 
+# 长期记忆注入：always=每轮都带事实+向量；never=不带；auto=仅当用户问句命中关键词时注入（见下）
+memory_inject_mode: always
+
+# memory_inject_mode=auto 时生效：子串匹配（任一命中即注入对应记忆）。不配则使用代码内默认词表。
+# memory_inject_factual_keywords: ["偏好", "画像"]
+# memory_inject_vector_keywords: ["上次", "记得"]
+
 # 多轮对话：传入模型的消息条数上限（user/assistant 交替计数）；超出则丢弃最早的消息
 conversation_max_messages: 40
 

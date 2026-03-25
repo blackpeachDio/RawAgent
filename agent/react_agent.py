@@ -12,31 +12,41 @@ from agent.tools.middleware import *
 from model.factory import chat_model
 from utils.config_utils import agent_conf
 from utils.log_utils import logger
+from utils.memory_inject import memory_inject_flags
 from utils.memory_utils import trim_conversation_messages, validate_chat_messages
 
 
 def _inject_memory_context(user_id: str, query: str) -> dict:
-    """按 user_id 注入：事实性画像（FactualStore）+ 向量记忆（经验/摘要/事件）。"""
+    """按 user_id 与配置注入：事实性画像（FactualStore）+ 向量记忆（经验/摘要/事件）。"""
+    inject_factual, inject_vector = memory_inject_flags(query, agent_conf)
+    if agent_conf.get("memory_inject_mode", "always").strip().lower() == "auto":
+        logger.debug(
+            "[memory] inject factual=%s vector=%s | q=%s",
+            inject_factual,
+            inject_vector,
+            query[:80],
+        )
+
     parts: list[str] = []
-    try:
-        # 1. 事实性记忆（hobby、name、偏好等，覆盖更新）
-        from memory.factual_store import get_factual_store
+    if inject_factual:
+        try:
+            from memory.factual_store import get_factual_store
 
-        factual = get_factual_store().get_all(user_id)
-        if factual:
-            lines = [f"{k}: {v}" for k, v in sorted(factual.items())]
-            parts.append("【用户画像】\n" + "\n".join(lines))
-    except Exception:
-        pass
-    try:
-        # 2. 向量记忆（经验、对话摘要、事件）
-        from memory.chroma_memory import get_memory_store
+            factual = get_factual_store().get_all(user_id)
+            if factual:
+                lines = [f"{k}: {v}" for k, v in sorted(factual.items())]
+                parts.append("【用户画像】\n" + "\n".join(lines))
+        except Exception:
+            pass
+    if inject_vector:
+        try:
+            from memory.chroma_memory import get_memory_store
 
-        vector_parts = get_memory_store().get_relevant(user_id, query, k=5)
-        if vector_parts:
-            parts.append("【经验与摘要】\n" + "\n".join(vector_parts))
-    except Exception:
-        pass
+            vector_parts = get_memory_store().get_relevant(user_id, query, k=5)
+            if vector_parts:
+                parts.append("【经验与摘要】\n" + "\n".join(vector_parts))
+        except Exception:
+            pass
     if parts:
         return {"memory": "\n\n".join(parts)}
     return {}
