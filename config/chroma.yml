@@ -4,6 +4,13 @@ persist_directory: ../chroma_db # RAG 向量库目录
 # --- 长期记忆（模型用：历史摘要、用户画像等，与 RAG 分离）---
 memory_collection_name: user_memory
 memory_persist_directory: ../chroma_memory_db
+# 写入时若已存在相同 user_id + 内容哈希的文档则跳过（避免重复事件堆积、减轻矛盾检索）
+memory_dedupe_on_write: true
+# 检索注入：先按相似度多取 overfetch*k 条（上限 max_cap），再按 created_at 新到旧排序，按 content_sha256 去重后取前 k 条
+memory_retrieve_overfetch: 2
+memory_retrieve_max_cap: 40
+# 无 query 时（若调用 get_relevant_all）从库中拉取的最大条数再排序截断
+memory_list_user_max_cap: 80
 # 向量粗排从 Chroma 取回的条数；仅当 rerank_enabled 为 true 时生效，应 >= k
 fetch_k: 20
 # 精排后进入 RAG 上下文的条数（CrossEncoder top_n）

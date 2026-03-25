@@ -3,8 +3,13 @@
 
 事实性记忆（hobby、name、偏好等）由 FactualStore 热插拔存储，不在此。
 使用独立 Chroma 存储，与 RAG 知识库（chroma_db）区分。
+
+写入：为每条记忆写入 created_at、content_sha256；可选按内容去重（见 chroma.yml memory_dedupe_on_write）。
 """
 from __future__ import annotations
+
+import hashlib
+from datetime import datetime, timezone
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
@@ -13,6 +18,10 @@ from model.factory import embedding_model
 from utils.config_utils import chroma_conf
 from utils.log_utils import logger
 from utils.path_utils import get_abs_path
+
+
+def _content_sha256(text: str) -> str:
+    return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()
 
 
 def _memory_persist_dir() -> str:
@@ -51,13 +60,47 @@ class ChromaMemoryStore:
             user_id: 用户标识
             content: 文本内容
             memory_type: summary（对话摘要）| experience（经验）| event（事件）
-            **metadata: 额外元数据
+            **metadata: 额外元数据（值须为 Chroma 可接受类型，建议字符串）
         """
         if memory_type not in ("summary", "experience", "event"):
             logger.warning("[Memory] 非预期 memory_type=%s，使用 summary", memory_type)
             memory_type = "summary"
-        meta = {"user_id": user_id, "memory_type": memory_type, **metadata}
-        doc = Document(page_content=content, metadata=meta)
+        text = (content or "").strip()
+        if not text:
+            logger.debug("[Memory] 跳过空内容写入 user_id=%s", user_id)
+            return
+
+        created_at = datetime.now(timezone.utc).isoformat()
+        sha = _content_sha256(text)
+        dedupe = bool(chroma_conf.get("memory_dedupe_on_write", True))
+        if dedupe:
+            try:
+                dup = self._store.get(
+                    where={
+                        "$and": [
+                            {"user_id": {"$eq": user_id}},
+                            {"content_sha256": {"$eq": sha}},
+                        ]
+                    },
+                    limit=1,
+                )
+                if dup.get("ids"):
+                    logger.debug("[Memory] 去重跳过写入 user_id=%s type=%s sha=%s...", user_id, memory_type, sha[:12], )
+                    return
+            except Exception as e:
+                logger.warning("[Memory] 去重查询失败，将直接写入: %s", e)
+
+        meta: dict = {
+            "user_id": user_id,
+            "memory_type": memory_type,
+            "created_at": created_at,
+            "content_sha256": sha,
+        }
+        for k, v in metadata.items():
+            if k in ("user_id", "memory_type", "created_at", "content_sha256"):
+                continue
+            meta[k] = v
+        doc = Document(page_content=text, metadata=meta)
         self._store.add_documents([doc])
 
     def get_relevant(
