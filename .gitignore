@@ -1,3 +1,6 @@
+# 本地密钥（Docker Compose 可用 .env 提供 DASHSCOPE_API_KEY）
+.env
+
 # JetBrains / PyCharm / IDEA
 .idea/
 chroma_db/

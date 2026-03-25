@@ -1,0 +1,23 @@
+.git
+.gitignore
+.idea
+**/__pycache__
+**/*.pyc
+**/*.pyo
+.pytest_cache
+.cursor
+agent-transcripts
+
+# 运行期数据（用卷挂载，不打进镜像）
+chroma_db
+chroma_memory_db
+history
+utils/logs
+
+# 密钥：镜像内不包含，运行时挂载或复制 api.yml
+config/api.yml
+
+# Docker 自身
+Dockerfile
+.dockerignore
+docker-compose.yml

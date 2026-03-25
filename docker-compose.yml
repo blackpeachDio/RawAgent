@@ -1,0 +1,21 @@
+services:
+  rawagent:
+    build: .
+    image: rawagent:latest
+    ports:
+      - "8501:8501"
+    volumes:
+      - chroma_data:/app/chroma_db
+      - memory_data:/app/chroma_memory_db
+      - history_data:/app/history
+      # 可选：宿主机已有 api.yml 时挂载覆盖（与 DASHSCOPE_API_KEY 二选一或并存，环境变量优先）
+      # - ./config/api.yml:/app/config/api.yml:ro
+    environment:
+      TZ: Asia/Shanghai
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
+    restart: unless-stopped
+
+volumes:
+  chroma_data:
+  memory_data:
+  history_data:
