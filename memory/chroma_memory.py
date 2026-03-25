@@ -5,6 +5,8 @@
 使用独立 Chroma 存储，与 RAG 知识库（chroma_db）区分。
 
 写入：为每条记忆写入 created_at、content_sha256；可选按内容去重（见 chroma.yml memory_dedupe_on_write）。
+
+检索注入：相似度多取 → 按 created_at 新到旧排序 → 按 content_sha256（或正文哈希）去重 → 截断 k 条。
 """
 from __future__ import annotations
 
@@ -22,6 +24,59 @@ from utils.path_utils import get_abs_path
 
 def _content_sha256(text: str) -> str:
     return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()
+
+
+def _created_at_sort_key(meta: dict | None) -> float:
+    """越大越新；无 created_at 的旧数据排后。"""
+    if not meta:
+        return 0.0
+    raw = meta.get("created_at")
+    if raw is None:
+        return 0.0
+    try:
+        s = str(raw).strip().replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.timestamp()
+    except Exception:
+        return 0.0
+
+
+def _finalize_memory_documents(
+        docs: list[Document],
+        k: int,
+        *,
+        dedupe_sha: bool = True,
+) -> list[Document]:
+    """按 created_at 新→旧排序；可选按 content_sha256 去重（保留时间上最新的一条）。"""
+    ordered = sorted(
+        docs,
+        key=lambda d: _created_at_sort_key(d.metadata or {}),
+        reverse=True,
+    )
+    if not dedupe_sha:
+        return ordered[:k]
+    seen: set[str] = set()
+    out: list[Document] = []
+    for d in ordered:
+        if not (d.page_content or "").strip():
+            continue
+        meta = d.metadata or {}
+        sha = meta.get("content_sha256")
+        if sha:
+            if sha in seen:
+                continue
+            seen.add(sha)
+        else:
+            h = _content_sha256(d.page_content or "")
+            if h in seen:
+                continue
+            seen.add(h)
+        out.append(d)
+        if len(out) >= k:
+            break
+    return out
 
 
 def _memory_persist_dir() -> str:
@@ -112,14 +167,23 @@ class ChromaMemoryStore:
         """
         按用户和查询检索相关记忆，返回内容列表。
 
-        用于注入到模型上下文（如 system prompt 或前置消息）。
+        流程：相似度多取 → 按 metadata.created_at 新到旧排序 → 去重 → 截断 k 条。
         """
-        results = self._store.similarity_search(
-            query,
-            k=k,
+        q = (query or "").strip()
+        if not q:
+            return []
+
+        over = int(chroma_conf.get("memory_retrieve_overfetch", 2))
+        cap = int(chroma_conf.get("memory_retrieve_max_cap", 40))
+        fetch_n = min(max(k * max(over, 1), k), cap)
+
+        raw = self._store.similarity_search(
+            q,
+            k=fetch_n,
             filter={"user_id": {"$eq": user_id}},
         )
-        return [d.page_content for d in results]
+        final = _finalize_memory_documents(raw, k, dedupe_sha=True)
+        return [d.page_content for d in final]
 
     def get_relevant_all(
             self,
@@ -128,17 +192,11 @@ class ChromaMemoryStore:
             k: int = 10,
     ) -> list[str]:
         """
-        获取用户最近/相关记忆。query 为空时按 user_id 过滤取最近 k 条。
+        获取用户最近/相关记忆。query 为空时按 user_id 列举后按时间排序取 k 条。
         """
         if query:
             return self.get_relevant(user_id, query, k=k)
-        # 无 query 时按 user_id 取最近添加的（Chroma 默认不保证顺序，这里简化）
-        results = self._store.similarity_search(
-            f"用户{user_id}的历史摘要与画像",
-            k=k,
-            filter={"user_id": {"$eq": user_id}},
-        )
-        return [d.page_content for d in results]
+        return []
 
 
 def get_memory_store() -> ChromaMemoryStore:

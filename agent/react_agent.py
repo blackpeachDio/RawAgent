@@ -42,8 +42,9 @@ def _inject_memory_context(user_id: str, query: str) -> dict:
         try:
             from memory.chroma_memory import get_memory_store
 
-            vector_parts = get_memory_store().get_relevant(user_id, query, k=5)
-            if vector_parts:
+            k_vec = int(agent_conf.get("memory_inject_vector_k", 5))
+            vector_parts = get_memory_store().get_relevant(user_id, query, k=k_vec)
+            if vector_parts and len(vector_parts) > 0:
                 parts.append("【经验与摘要】\n" + "\n".join(vector_parts))
         except Exception:
             pass

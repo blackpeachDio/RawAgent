@@ -7,6 +7,9 @@ memory_inject_mode: always
 # memory_inject_factual_keywords: ["偏好", "画像"]
 # memory_inject_vector_keywords: ["上次", "记得"]
 
+# 注入 LLM 时，向量记忆（Chroma）最多注入几条正文（检索后经时间排序与去重）
+memory_inject_vector_k: 3
+
 # 多轮对话：传入模型的消息条数上限（user/assistant 交替计数）；超出则丢弃最早的消息
 conversation_max_messages: 40
 
