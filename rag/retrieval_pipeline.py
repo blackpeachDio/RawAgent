@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.documents import Document
@@ -45,6 +46,58 @@ def dedupe_documents(documents: list[Document]) -> list[Document]:
         seen.add(k)
         out.append(d)
     return out
+
+
+def _chroma_query_result_to_documents(raw: dict[str, Any]) -> list[Document]:
+    """解析 Chroma `collection.query` 多路结果（documents/metadatas 为「每路一条」的嵌套列表）。"""
+    out: list[Document] = []
+    docs_batch = raw.get("documents") or []
+    metas_batch = raw.get("metadatas") or []
+    for qi in range(len(docs_batch)):
+        doc_row = docs_batch[qi] or []
+        meta_row = metas_batch[qi] if qi < len(metas_batch) else []
+        for j, content in enumerate(doc_row):
+            if content is None:
+                continue
+            md = meta_row[j] if j < len(meta_row) else {}
+            out.append(Document(page_content=str(content), metadata=dict(md or {})))
+    return out
+
+
+def _vector_search_chroma_batch(
+        vector_store: Chroma,
+        queries: list[str],
+        fetch_k: int,
+) -> list[Document]:
+    """
+    多路查询：单次 Chroma batch + 批量向量（embed_documents 或逐条 embed_query）。
+    多路时**必须**配置 LangChain Chroma 的 embedding_function；单路仍走 similarity_search。
+    """
+    if not queries:
+        return []
+    if len(queries) == 1:
+        return vector_store.similarity_search(queries[0], k=fetch_k)
+
+    emb = getattr(vector_store, "_embedding_function", None)
+    if emb is None:
+        raise ValueError(
+            "多路向量检索必须配置 embedding 模型：Chroma 初始化时需传入 embedding_function（见 rag/online_query 等）。"
+        )
+
+    try:
+        col = vector_store._collection  # noqa: SLF001
+        if hasattr(emb, "embed_documents"):
+            vecs = emb.embed_documents(queries)
+        else:
+            vecs = [emb.embed_query(q) for q in queries]
+        raw = col.query(query_embeddings=vecs, n_results=fetch_k)
+        return _chroma_query_result_to_documents(raw)
+    except Exception as e:
+        logger.warning("[RAG] Chroma 批量查询失败，回退逐条 similarity_search: %s", e)
+        pool: list[Document] = []
+        for q in queries:
+            pool.extend(vector_store.similarity_search(q, k=fetch_k))
+        return pool
 
 
 def rewrite_queries_for_retrieval(user_query: str) -> list[str]:
@@ -191,16 +244,21 @@ def retrieve_documents(
     queries = rewrite_queries_for_retrieval(query) if rewrite_on else [query.strip()]
 
     pool: list[Document] = []
-    for q in queries:
-        pool.extend(vector_store.similarity_search(q, k=fetch_k))
+    do_bm25 = hybrid_on and bm25_retriever is not None
 
-    if hybrid_on and bm25_retriever is not None:
-        try:
-            extra = bm25_retriever.invoke(query)
-            if isinstance(extra, list):
-                pool.extend(extra[:fetch_k])
-        except Exception as e:
-            logger.warning("[RAG] BM25 检索失败，仅用向量: %s", e)
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        vec_fut = ex.submit(_vector_search_chroma_batch, vector_store, queries, fetch_k)
+        bm25_fut = ex.submit(bm25_retriever.invoke, query) if do_bm25 else None
+
+        pool.extend(vec_fut.result())
+
+        if bm25_fut is not None:
+            try:
+                extra = bm25_fut.result()
+                if isinstance(extra, list):
+                    pool.extend(extra[:fetch_k])
+            except Exception as e:
+                logger.warning("[RAG] BM25 检索失败，仅用向量: %s", e)
 
     pool = dedupe_documents(pool)[:merge_cap]
 
