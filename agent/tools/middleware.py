@@ -10,6 +10,39 @@ from utils.log_utils import logger
 from utils.token_utils import count_agent_llm_input_tokens
 
 
+def _tool_call_id(request: ToolCallRequest) -> str | None:
+    tc = request.tool_call
+    if isinstance(tc, dict):
+        return tc.get("id")
+    return getattr(tc, "id", None)
+
+
+def _tool_error_content_for_model(request: ToolCallRequest, exc: Exception) -> str:
+    """结构化错误文本，便于模型区分参数/超时/网络等并重试。"""
+    tc = request.tool_call
+    name = tc.get("name", "unknown") if isinstance(tc, dict) else getattr(tc, "name", "unknown")
+    err_type = type(exc).__name__
+    msg = (str(exc) or "").strip() or "（无详细信息）"
+    low = msg.lower()
+    if "timeout" in low or isinstance(exc, TimeoutError):
+        hint = "倾向：超时类问题，可稍后重试、缩小请求范围或换用其它工具。"
+    elif err_type in ("ValidationError", "ValueError", "TypeError", "KeyError", "JSONDecodeError"):
+        hint = "倾向：参数或返回解析问题，请对照工具定义修正入参后再调。"
+    elif any(s in low for s in ("connection", "resolve", "network", "ssl", "errno")):
+        hint = "倾向：网络连接类问题，可稍后重试。"
+    elif "429" in msg or "rate" in low:
+        hint = "倾向：限流或配额，请稍后重试。"
+    else:
+        hint = "请根据错误类型判断是否修正参数或稍后重试；勿向用户编造工具已成功。"
+    return (
+        f"[工具执行失败]\n"
+        f"工具名: {name}\n"
+        f"错误类型: {err_type}\n"
+        f"错误详情: {msg}\n"
+        f"处理建议: {hint}"
+    )
+
+
 @wrap_tool_call
 def monitor_tool(
         # 请求的数据封装
@@ -29,8 +62,13 @@ def monitor_tool(
 
         return result
     except Exception as e:
-        logger.error(f"工具{request.tool_call['name']}调用失败，原因：{str(e)}")
-        raise e
+        name = request.tool_call.get("name", "") if isinstance(request.tool_call, dict) else getattr(request.tool_call, "name", "")
+        logger.error(f"工具{name}调用失败，原因：{str(e)}", exc_info=True)
+        tid = _tool_call_id(request)
+        if tid is None:
+            raise
+        body = _tool_error_content_for_model(request, e)
+        return ToolMessage(content=body, tool_call_id=tid)
 
 
 @before_model
