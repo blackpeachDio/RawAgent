@@ -7,6 +7,7 @@ from langchain.agents import create_agent
 from langchain_core.messages import AIMessage
 from langgraph.errors import GraphRecursionError
 
+from agent.mcp_loader import load_remote_mcp_tools_sync
 from agent.tools.agent_tools import *
 from agent.tools.middleware import *
 from model.factory import chat_model
@@ -55,6 +56,7 @@ def _inject_memory_context(user_id: str, query: str) -> dict:
 
 class ReactAgent:
     def __init__(self):
+        mcp_tools = load_remote_mcp_tools_sync()
         self.agent = create_agent(
             model=chat_model,
             system_prompt=load_system_prompts(),
@@ -66,6 +68,7 @@ class ReactAgent:
                 get_current_month,
                 fetch_external_data,
                 fill_context_for_report,
+                *mcp_tools,
             ],
             middleware=[monitor_tool, log_before_model, build_system_prompt],
         )

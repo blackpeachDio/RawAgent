@@ -28,6 +28,12 @@ def load_agent_config(config_path: str = get_abs_path("../config/agent.yml"), en
     with open(config_path, "r", encoding=encoding) as f:
         return yaml.load(f, Loader=yaml.FullLoader)
 
+
+def load_mcp_config(config_path: str = get_abs_path("../config/mcp.yml"), encoding: str = "utf-8"):
+    with open(config_path, "r", encoding=encoding) as f:
+        return yaml.load(f, Loader=yaml.FullLoader) or {}
+
+
 def load_api_config(config_path: str = get_abs_path("../config/api.yml"), encoding: str = "utf-8"):
     """支持 config/api.yml；Docker/CI 可仅用环境变量 DASHSCOPE_API_KEY（会覆盖文件中的值）。"""
     data: dict = {}
@@ -48,6 +54,7 @@ rag_conf = load_rag_config()
 chroma_conf = load_chroma_config()
 prompts_conf = load_prompts_config()
 agent_conf = load_agent_config()
+mcp_conf = load_mcp_config()
 api_conf = load_api_config()
 
 # if __name__ == '__main__':
