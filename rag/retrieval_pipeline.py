@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage
 
+from rag.parent_store import get_parent_store
 from utils.config_utils import chroma_conf
 from utils.log_utils import logger
 
@@ -50,25 +51,49 @@ def dedupe_documents(documents: list[Document]) -> list[Document]:
 
 def expand_parent_documents(documents: list[Document]) -> list[Document]:
     """
-    父子块索引：向量/BM25 命中的是子块；送入生成前展开为父块正文，节省重复并给模型更大上下文。
-    无 parent_id / parent_content 的文档（旧索引或普通分块）原样保留。
+    父子块索引：命中子块后展开为父块正文。
+    优先从 SQLite 映射表按 parent_id 取全文；若无表或查不到，则回退 metadata 中的 parent_content（旧索引兼容）。
     """
     if not documents:
         return []
+    store = get_parent_store()
+    need_fetch: list[str] = []
+    for d in documents:
+        m = d.metadata or {}
+        pid = m.get("parent_id")
+        if not pid or m.get("parent_content"):
+            continue
+        need_fetch.append(str(pid))
+    by_id: dict[str, str] = {}
+    if store and need_fetch:
+        by_id = store.get_many(list(dict.fromkeys(need_fetch)))
+
     out: list[Document] = []
     seen_parent: set[str] = set()
     for d in documents:
-        meta = d.metadata or {}
+        meta = dict(d.metadata or {})
         pid = meta.get("parent_id")
+        if not pid:
+            out.append(d)
+            continue
+        pid_s = str(pid)
         ptext = meta.get("parent_content")
-        if pid and ptext:
-            if pid in seen_parent:
+        if not ptext:
+            ptext = by_id.get(pid_s)
+        if not ptext and store:
+            ptext = store.get(pid_s)
+        if ptext:
+            if pid_s in seen_parent:
                 continue
-            seen_parent.add(pid)
-            new_meta = dict(meta)
-            new_meta["expanded_from"] = "parent_child"
-            out.append(Document(page_content=str(ptext), metadata=new_meta))
+            seen_parent.add(pid_s)
+            meta.pop("parent_content", None)
+            meta["expanded_from"] = "parent_child"
+            out.append(Document(page_content=str(ptext), metadata=meta))
         else:
+            logger.warning(
+                "[RAG] 父子展开失败：parent_id=%s 无映射且无 parent_content，保留子块",
+                pid_s,
+            )
             out.append(d)
     return out
 

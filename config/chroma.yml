@@ -47,10 +47,12 @@ chunk_size: 200
 chunk_overlap: 20
 separators: [ "\n\n", "\n", ".", "!", "?", "。", "！", "？", " ", "" ]
 
-# --- 父子块（Small-to-Big）：子块嵌入检索，命中后展开为父块上下文再参与精排/总结 ---
-# 开启后需重新跑离线索引（旧索引无 parent 元数据则仍按普通块检索）
+# --- 父子块（Small-to-Big）：子块进向量库；父块正文存 SQLite 映射表，不塞进 Chroma metadata ---
+# 开启后需重新跑离线索引；需配置 parent_child_map_path
 parent_child_enabled: false
 parent_chunk_size: 1200
 parent_chunk_overlap: 100
-# 写入 metadata 的父块正文上限（过大可能触 Chroma 限制；超出截断并标记）
-parent_content_max_chars: 12000
+# 父块全文落库路径（相对 utils）；与 chroma_db 并列即可
+parent_child_map_path: ../chroma_db/parent_chunks.sqlite
+# 写入映射表前父块最大字符数，0 表示不截断（SQLite 单字段通常足够大）
+parent_insert_max_chars: 0
