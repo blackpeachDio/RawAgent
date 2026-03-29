@@ -48,6 +48,31 @@ def dedupe_documents(documents: list[Document]) -> list[Document]:
     return out
 
 
+def expand_parent_documents(documents: list[Document]) -> list[Document]:
+    """
+    父子块索引：向量/BM25 命中的是子块；送入生成前展开为父块正文，节省重复并给模型更大上下文。
+    无 parent_id / parent_content 的文档（旧索引或普通分块）原样保留。
+    """
+    if not documents:
+        return []
+    out: list[Document] = []
+    seen_parent: set[str] = set()
+    for d in documents:
+        meta = d.metadata or {}
+        pid = meta.get("parent_id")
+        ptext = meta.get("parent_content")
+        if pid and ptext:
+            if pid in seen_parent:
+                continue
+            seen_parent.add(pid)
+            new_meta = dict(meta)
+            new_meta["expanded_from"] = "parent_child"
+            out.append(Document(page_content=str(ptext), metadata=new_meta))
+        else:
+            out.append(d)
+    return out
+
+
 def _chroma_query_result_to_documents(raw: dict[str, Any]) -> list[Document]:
     """解析 Chroma `collection.query` 多路结果（documents/metadatas 为「每路一条」的嵌套列表）。"""
     out: list[Document] = []
@@ -267,7 +292,7 @@ def retrieve_documents(
         return []
 
     if not rerank_on:
-        return pool[:final_k]
+        return expand_parent_documents(pool[:final_k])
 
     try:
         cross = get_cached_cross_encoder()
@@ -293,7 +318,7 @@ def retrieve_documents(
             )
             return []
 
-    return top_docs
+    return expand_parent_documents(top_docs)
 
 
 REFUSAL_MESSAGE = "当前知识库中未检索到与您问题足够相关的可靠资料，暂无法基于资料作答。请尝试换一种问法或联系人工客服。"
