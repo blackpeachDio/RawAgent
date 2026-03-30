@@ -9,8 +9,8 @@
       "transportType": "sse",
       "autoApprove": []
     },
-    "top_act_info_mcp": {
-      "disabled": false,
+    "user_info_mcp": {
+      "disabled": true,
       "url": "http://127.0.0.1:8010/mcp",
       "transportType": "http",
       "autoApprove": []

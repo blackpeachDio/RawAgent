@@ -8,4 +8,6 @@ chroma_memory_db/
 history/
 utils/logs
 config/api.yml
+# 本地 Cookie（勿提交）
+config/top_act_cookie.txt
 models/bge-reranker-base/*

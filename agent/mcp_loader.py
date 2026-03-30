@@ -43,7 +43,6 @@ def _ensure_sync_mcp_tool(tool: Any) -> Any:
         return tool
 
     return_direct = bool(getattr(tool, "return_direct", False))
-    response_format = getattr(tool, "response_format", "content")
 
     def _sync(**kwargs: Any) -> Any:
         return _run_coro_sync(tool.ainvoke(kwargs))
@@ -56,7 +55,7 @@ def _ensure_sync_mcp_tool(tool: Any) -> Any:
             args_schema=args_schema,
             infer_schema=False,
             return_direct=return_direct,
-            response_format=response_format,
+            response_format="content",
         )
         logger.debug("[mcp] 已为工具 %s 添加同步 func 包装", name)
         return wrapped
