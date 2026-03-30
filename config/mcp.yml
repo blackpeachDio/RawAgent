@@ -1,9 +1,0 @@
-# 远程 MCP（HTTP Streamable）：需先启动 mcp/user_info_mcp/server.py
-# strict=true 时若连不上 MCP，Agent 初始化失败；false 时仅记录警告并仅用本地 tools
-enabled: true
-strict: false
-tool_name_prefix: true
-connections:
-  user_info_mcp:
-    transport: http
-    url: "http://127.0.0.1:8010/mcp"

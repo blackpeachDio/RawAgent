@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "strict": false,
+  "tool_name_prefix": true,
+  "mcpServers": {
+    "jsf": {
+      "disabled": false,
+      "url": "http://dongmcp.jd.com/mcp/${接口名}/sse?appName=${行云应用名}",
+      "transportType": "sse",
+      "autoApprove": []
+    },
+    "user_info_mcp": {
+      "disabled": false,
+      "url": "http://127.0.0.1:8010/mcp",
+      "transportType": "http",
+      "autoApprove": []
+    }
+  }
+}

@@ -2,6 +2,7 @@
 yaml
 k: v
 """
+import json
 import os
 
 import yaml
@@ -29,9 +30,12 @@ def load_agent_config(config_path: str = get_abs_path("../config/agent.yml"), en
         return yaml.load(f, Loader=yaml.FullLoader)
 
 
-def load_mcp_config(config_path: str = get_abs_path("../config/mcp.yml"), encoding: str = "utf-8"):
+def load_mcp_config(config_path: str = get_abs_path("../config/mcp.json"), encoding: str = "utf-8"):
+    """Cursor 风格 MCP：见 config/mcp.json（mcpServers + transportType）。"""
+    if not os.path.isfile(config_path):
+        return {}
     with open(config_path, "r", encoding=encoding) as f:
-        return yaml.load(f, Loader=yaml.FullLoader) or {}
+        return json.load(f)
 
 
 def load_api_config(config_path: str = get_abs_path("../config/api.yml"), encoding: str = "utf-8"):

@@ -1,5 +1,6 @@
 """
 user_info_mcp：通过 Streamable HTTP 暴露 MCP 工具（仅远程连接，本进程不供 Agent 直接 import 调用）。
+Agent 侧连接列表见 config/mcp.json（mcpServers.user_info_mcp）。
 
 启动（项目根目录）:
   python mcp/user_info_mcp/server.py
