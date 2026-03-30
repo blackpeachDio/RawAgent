@@ -7,7 +7,7 @@ from memory.history_store import get_history_store
 from utils.log_utils import set_session_id
 
 # 标题
-st.title("扫地机器人智能客服")
+st.title("RAW智能助手")
 st.divider()
 
 # 每个浏览器会话独立的 session_state → 对话隔离

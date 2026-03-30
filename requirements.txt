@@ -14,7 +14,7 @@ rank-bm25>=0.2.2
 # MCP（Model Context Protocol）示例服务器依赖：用于学习 Cursor MCP 工具调用
 mcp>=1.2.0,<2.0.0
 click>=8.1.0
-# Agent 通过 HTTP 连接远程 MCP；user_info_mcp 服务使用 FastMCP
+# Agent 通过 HTTP 连接远程 MCP；top_act_info_mcp 服务使用 FastMCP
 langchain-mcp-adapters
 fastmcp
 
