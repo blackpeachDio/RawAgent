@@ -70,7 +70,7 @@ class ReactAgent:
                 fill_context_for_report,
                 *mcp_tools,
             ],
-            middleware=[monitor_tool, log_before_model, build_system_prompt],
+            middleware=[monitor_tool, log_before_model, build_system_prompt, log_wrap_model_tokens],
         )
         self._max_messages = int(agent_conf.get("conversation_max_messages", 40))
         self._recursion_limit = int(agent_conf.get("agent_recursion_limit", 40))

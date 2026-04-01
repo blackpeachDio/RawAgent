@@ -1,13 +1,20 @@
 from typing import Callable
 from utils.prompt_utils import format_memory_system_prompt, load_report_prompts, load_system_prompts
 from langchain.agents import AgentState
-from langchain.agents.middleware import wrap_tool_call, before_model, dynamic_prompt, ModelRequest
+from langchain.agents.middleware import (
+    wrap_tool_call,
+    before_model,
+    dynamic_prompt,
+    wrap_model_call,
+    ModelRequest,
+    ModelResponse,
+)
 from langchain.tools.tool_node import ToolCallRequest
 from langchain_core.messages import ToolMessage
 from langgraph.runtime import Runtime
 from langgraph.types import Command
 from utils.log_utils import logger
-from utils.token_utils import count_agent_llm_input_tokens
+from utils.token_utils import count_agent_llm_input_tokens_from_model_request
 
 
 def _tool_call_id(request: ToolCallRequest) -> str | None:
@@ -77,24 +84,24 @@ def log_before_model(
         runtime: Runtime,           # 记录了整个执行过程中的上下文信息
 ):         # 在模型执行前输出日志
     logger.info(f"[log_before_model]即将调用模型，带有{len(state['messages'])}条消息。")
+    return None
 
+
+@wrap_model_call
+def log_wrap_model_tokens(
+    request: ModelRequest,
+    handler: Callable[[ModelRequest], ModelResponse],
+) -> ModelResponse:
+    """在真正调模型前用 ModelRequest 估算 token（含 system、messages、tools schema 等）。"""
     try:
-        n_in = count_agent_llm_input_tokens(state, runtime)
-        logger.info("[agent_llm] 输入 token 估算（cl100k_base 近似，供成本参考）: %d", n_in)
+        n_in = count_agent_llm_input_tokens_from_model_request(request)
+        logger.info(
+            "[agent_llm] 输入 token 估算（含 system、messages、tools 等，cl100k_base 近似，供成本参考）: %d",
+            n_in,
+        )
     except Exception as e:
         logger.warning("[agent_llm] token 估算失败: %s", e)
-
-    # full, max_chars = get_prompt_log_config()
-    #
-    # try:
-    #     msg_list = state.get("messages") or []
-    #     truncate_fn = lambda s: maybe_truncate(s, full=full, max_chars=max_chars)
-    #     prompt_text = format_messages_as_prompt_text(msg_list, truncate_fn=truncate_fn)
-    #     log_truncated_block(logger, "[PROMPT_BEGIN]", "[PROMPT_END]", prompt_text)
-    # except Exception as e:
-    #     logger.warning("[log_before_model]打印 prompt 失败：%s", str(e))
-
-    return None
+    return handler(request)
 
 
 @dynamic_prompt
