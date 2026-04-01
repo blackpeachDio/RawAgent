@@ -30,6 +30,15 @@ def load_agent_config(config_path: str = get_abs_path("../config/agent.yml"), en
         return yaml.load(f, Loader=yaml.FullLoader)
 
 
+def load_skills_config(config_path: str = get_abs_path("../config/skills.yml"), encoding: str = "utf-8"):
+    """RawAgent 运行时技能（raw_agent_skills/）；文件不存在则关闭。"""
+    if not os.path.isfile(config_path):
+        return {"enabled": False, "root": "raw_agent_skills", "max_body_chars": 12000}
+    with open(config_path, "r", encoding=encoding) as f:
+        data = yaml.load(f, Loader=yaml.FullLoader)
+        return data if isinstance(data, dict) else {}
+
+
 def load_mcp_config(config_path: str = get_abs_path("../config/mcp.json"), encoding: str = "utf-8"):
     """Cursor 风格 MCP：见 config/mcp.json（mcpServers + transportType）。"""
     if not os.path.isfile(config_path):
@@ -58,6 +67,7 @@ rag_conf = load_rag_config()
 chroma_conf = load_chroma_config()
 prompts_conf = load_prompts_config()
 agent_conf = load_agent_config()
+skills_conf = load_skills_config()
 mcp_conf = load_mcp_config()
 api_conf = load_api_config()
 

@@ -1,0 +1,8 @@
+# RawAgent 运行时技能（raw_agent_skills/ 下各子目录的 SKILL.md）
+# 与 Cursor 编辑器技能无关；仅本应用内 list / get 工具使用。
+
+enabled: true
+# 相对项目根目录的技能根目录名
+root: raw_agent_skills
+# get_agent_skill 返回正文的最大字符数（避免一次拉满上下文）
+max_body_chars: 12000

@@ -8,6 +8,7 @@ from langchain_core.messages import AIMessage
 from langgraph.errors import GraphRecursionError
 
 from agent.mcp_loader import load_remote_mcp_tools_sync
+from raw_agent_skillkit import build_skill_tools
 from agent.tools.agent_tools import *
 from agent.tools.middleware import *
 from model.factory import chat_model
@@ -68,6 +69,7 @@ class ReactAgent:
                 get_current_month,
                 fetch_external_data,
                 fill_context_for_report,
+                *build_skill_tools(),
                 *mcp_tools,
             ],
             middleware=[monitor_tool, log_before_model, build_system_prompt, log_wrap_model_tokens],
