@@ -1,15 +1,18 @@
 """
 记忆提取与存储：一轮对话结束后，异步调用 LLM 提取事实与事件并分别存储。
+支持从最近 N 轮对话构建上下文，便于跨轮抽取事实与事件。
 """
 from __future__ import annotations
 
 import json
 import threading
+from typing import Any
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 
 from model.factory import chat_model
+from utils.config_utils import agent_conf
 from utils.log_utils import logger
 from utils.prompt_utils import load_mem_extract_prompts
 
@@ -19,8 +22,73 @@ ALLOWED_FACT_KEYS = frozenset(
 
 
 def _format_conversation(user_msg: str, assistant_msg: str) -> str:
-    """将本轮对话格式化为文本。"""
-    return f"用户：{user_msg}\n助手：{assistant_msg}"
+    """单轮：将本轮对话格式化为文本。"""
+    return f"【本轮】\n用户：{user_msg}\n助手：{assistant_msg}"
+
+
+def _messages_to_user_assistant_rounds(msgs: list[dict[str, Any]]) -> list[tuple[str, str]]:
+    """将 history 消息列表合并为 (user, assistant) 轮次列表（时间正序）。"""
+    out: list[tuple[str, str]] = []
+    i = 0
+    while i < len(msgs):
+        if msgs[i].get("role") != "user":
+            i += 1
+            continue
+        u = str(msgs[i].get("content") or "").strip()
+        if i + 1 < len(msgs) and msgs[i + 1].get("role") == "assistant":
+            a = str(msgs[i + 1].get("content") or "").strip()
+            out.append((u, a))
+            i += 2
+        else:
+            i += 1
+    return out
+
+
+def _format_rounds_for_prompt(rounds: list[tuple[str, str]]) -> str:
+    lines: list[str] = []
+    base = len(rounds)
+    for idx, (u, a) in enumerate(rounds):
+        turn_no = idx + 1
+        lines.append(f"【第{turn_no}轮】（共{base}轮，自旧到新）")
+        lines.append(f"用户：{u}")
+        lines.append(f"助手：{a}")
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
+def _truncate_rounds_by_char_budget(
+        rounds: list[tuple[str, str]],
+        max_chars: int,
+) -> list[tuple[str, str]]:
+    """从最早轮开始丢弃，直到总长度不超过 max_chars。"""
+    r = list(rounds)
+    while r and len(_format_rounds_for_prompt(r)) > max_chars:
+        r.pop(0)
+    return r
+
+
+def _build_extraction_conversation(user_id: str, user_msg: str, assistant_msg: str) -> str:
+    """
+    构建写入 mem_extract 提示词的对话块。
+    有 user_id 时优先从 FileHistoryStore 取最近 N 轮（已含本轮，因 assistant 已持久化后再异步提取）。
+    """
+    max_rounds = max(1, int(agent_conf.get("memory_extract_max_rounds", 5)))
+    max_chars = max(500, int(agent_conf.get("memory_extract_max_context_chars", 12000)))
+
+    if user_id:
+        try:
+            from memory.history_store import get_history_store
+
+            msgs = get_history_store().get_messages(user_id)
+            rounds = _messages_to_user_assistant_rounds(msgs)
+            if rounds:
+                tail = rounds[-max_rounds:]
+                tail = _truncate_rounds_by_char_budget(tail, max_chars)
+                return _format_rounds_for_prompt(tail)
+        except Exception as e:
+            logger.warning("[Memory] 读取多轮历史失败，退化为单轮: %s", e)
+
+    return _format_conversation(user_msg, assistant_msg)
 
 
 def _extract_facts_and_events(conversation: str) -> tuple[list[dict], list[str]]:
@@ -98,7 +166,7 @@ def extract_and_store(user_id: str, user_msg: str, assistant_msg: str) -> None:
     """
     if not user_id:
         return
-    conversation = _format_conversation(user_msg, assistant_msg)
+    conversation = _build_extraction_conversation(user_id, user_msg, assistant_msg)
     facts, events = _extract_facts_and_events(conversation)
     if facts or events:
         _store_extracted(user_id, facts, events)

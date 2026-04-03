@@ -15,6 +15,11 @@ memory_inject_auto_strategy: llm
 # 注入 LLM 时，向量记忆（Chroma）最多注入几条正文（检索后经时间排序与去重）
 memory_inject_vector_k: 3
 
+# 记忆提取（extract_store）：带入最近 N 轮「用户+助手」成对对话（含本轮）；至少 1
+memory_extract_max_rounds: 3
+# 提取上下文最大字符数（从最早轮开始丢弃以满足预算）
+memory_extract_max_context_chars: 12000
+
 # 多轮对话：传入模型的消息条数上限（user/assistant 交替计数）；超出则丢弃最早的消息
 conversation_max_messages: 40
 
