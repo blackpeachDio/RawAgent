@@ -4,7 +4,7 @@ top_act_info_mcp：通过 Streamable HTTP 暴露 MCP 工具 get_top_act_by_id（
 Agent 侧连接见 config/mcp.json（mcpServers.top_act_info_mcp）。
 
 启动（项目根目录）:
-  python mcp/top_act_info_mcp/server.py
+  python mcp_servers/top_act_info_mcp/server.py
 
 默认监听: http://127.0.0.1:8010/mcp
 
