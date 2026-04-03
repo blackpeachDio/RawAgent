@@ -1,9 +1,14 @@
 external_data_path: ../data/external/records.csv
 
-# 长期记忆注入：always=每轮都带事实+向量；never=不带；auto=仅当用户问句命中关键词时注入（见下）
+# 长期记忆注入：always=每轮都带事实+向量；never=不带；auto=按需注入（见 memory_inject_auto_strategy）
 memory_inject_mode: always
 
-# memory_inject_mode=auto 时生效：子串匹配（任一命中即注入对应记忆）。不配则使用代码内默认词表。
+# memory_inject_mode=auto 时：llm=轻量模型意图分类（默认）；keywords=子串匹配（旧逻辑，LLM 失败时也会回退）
+memory_inject_auto_strategy: llm
+# auto+llm：DashScope 模型名（宜轻量，如 qwen-turbo）；不配则 qwen-turbo
+# memory_inject_classifier_model: qwen-turbo
+
+# auto+keywords 或 LLM 回退：子串匹配。不配则代码内默认词表。
 # memory_inject_factual_keywords: ["偏好", "画像"]
 # memory_inject_vector_keywords: ["上次", "记得"]
 

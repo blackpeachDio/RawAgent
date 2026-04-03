@@ -72,6 +72,23 @@ def load_mem_extract_prompts():
         raise
 
 
+def load_memory_inject_classifier_prompt() -> str:
+    """memory_inject_mode=auto 且 strategy=llm 时，判定是否注入事实/向量记忆的短提示词；占位符：<<<USER_QUERY>>>。"""
+    try:
+        prompt_path = prompts_conf.get(
+            "memory_inject_classifier_prompt_path",
+            "../prompts/memory_inject_classifier.txt",
+        )
+        path = get_abs_path(prompt_path)
+    except KeyError:
+        path = get_abs_path("../prompts/memory_inject_classifier.txt")
+    try:
+        return open(path, "r", encoding="utf-8").read()
+    except Exception as e:
+        logger.error("[load_memory_inject_classifier_prompt] 解析出错: %s", e)
+        raise
+
+
 def load_mem_inject_prompts() -> str:
     """拼接「用户记忆」与主 system 的模板，占位符：{memory}、{base}。"""
     try:
