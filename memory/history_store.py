@@ -90,11 +90,17 @@ class FileHistoryStore(HistoryStore):
 
 
 # 热插拔示例：后续可新增 class MySQLHistoryStore(HistoryStore) 实现相同接口
-# def get_history_store(): return MySQLHistoryStore(conn=...) 即可切换
+# 在 get_history_store 内切换实现即可。
+
+_history_store: HistoryStore | None = None
+
 
 def get_history_store() -> HistoryStore:
     """
-    获取历史存储实例（热插拔入口）。
+    获取历史存储实例（热插拔入口，进程内单例）。
     当前为 FileHistoryStore；后续可替换为 MySQLHistoryStore 等，实现接口即可。
     """
-    return FileHistoryStore()
+    global _history_store
+    if _history_store is None:
+        _history_store = FileHistoryStore()
+    return _history_store

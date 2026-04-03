@@ -199,6 +199,12 @@ class ChromaMemoryStore:
         return []
 
 
+_memory_store: ChromaMemoryStore | None = None
+
+
 def get_memory_store() -> ChromaMemoryStore:
-    """获取记忆存储实例。"""
-    return ChromaMemoryStore()
+    """获取记忆存储实例（进程内单例，复用 Chroma 连接）。"""
+    global _memory_store
+    if _memory_store is None:
+        _memory_store = ChromaMemoryStore()
+    return _memory_store
