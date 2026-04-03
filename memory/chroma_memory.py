@@ -6,7 +6,9 @@
 
 写入：为每条记忆写入 created_at、content_sha256；可选按内容去重（见 chroma.yml memory_dedupe_on_write）。
 
-检索注入：相似度多取 → 按 created_at 新到旧排序 → 按 content_sha256（或正文哈希）去重 → 截断 k 条。
+过期数据由 schedule/purge_expired_memory.py 按 memory_ttl_days 定时物理删除；检索侧不做 TTL 过滤。
+
+检索注入：LangChain similarity_search 粗排多取 → 按 created_at 新到旧排序 → 按 content_sha256 去重 → 截断 k 条。
 """
 from __future__ import annotations
 
@@ -167,7 +169,7 @@ class ChromaMemoryStore:
         """
         按用户和查询检索相关记忆，返回内容列表。
 
-        流程：相似度多取 → 按 metadata.created_at 新到旧排序 → 去重 → 截断 k 条。
+        流程：similarity_search 粗排多取 → 按 created_at 排序去重 → top k。
         """
         q = (query or "").strip()
         if not q:
@@ -177,26 +179,18 @@ class ChromaMemoryStore:
         cap = int(chroma_conf.get("memory_retrieve_max_cap", 40))
         fetch_n = min(max(k * max(over, 1), k), cap)
 
-        raw = self._store.similarity_search(
-            q,
-            k=fetch_n,
-            filter={"user_id": {"$eq": user_id}},
-        )
-        final = _finalize_memory_documents(raw, k, dedupe_sha=True)
-        return [d.page_content for d in final]
+        try:
+            raw = self._store.similarity_search(
+                q,
+                k=fetch_n,
+                filter={"user_id": {"$eq": user_id}},
+            )
+        except Exception as e:
+            logger.warning("[Memory] similarity_search 失败: %s", e)
+            return []
 
-    def get_relevant_all(
-            self,
-            user_id: str,
-            query: str | None = None,
-            k: int = 10,
-    ) -> list[str]:
-        """
-        获取用户最近/相关记忆。query 为空时按 user_id 列举后按时间排序取 k 条。
-        """
-        if query:
-            return self.get_relevant(user_id, query, k=k)
-        return []
+        final_docs = _finalize_memory_documents(raw, k, dedupe_sha=True)
+        return [d.page_content for d in final_docs]
 
 
 _memory_store: ChromaMemoryStore | None = None
