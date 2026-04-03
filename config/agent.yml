@@ -24,6 +24,3 @@ agent_recursion_limit: 40
 
 # 事实性记忆存储（热插拔）：memory=内存，redis=Redis（后期）
 factual_store_type: memory
-
-# Streamlit（app.py）：是否在助手气泡内用折叠区展示工具名 / 参数摘要 / 返回摘要
-streamlit_show_tool_trace: true

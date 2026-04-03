@@ -3,15 +3,11 @@ React Agent：支持多轮 messages；流式输出。
 会话隔离：由调用方（如 app.py 的 st.session_state["chat_messages"]）按浏览器会话分别维护列表。
 模型用长期记忆（摘要、画像）：由 Agent 内部按 user_id 检索并注入 context。
 """
-from __future__ import annotations
-
-from collections.abc import Iterator
-from typing import Any
-
 from langchain.agents import create_agent
+from langchain_core.messages import AIMessage
+from langgraph.errors import GraphRecursionError
 
 from agent.mcp_loader import load_remote_mcp_tools_sync
-from agent.values_stream_events import iter_stream_events_from_values_stream
 from raw_agent_skillkit import build_skill_tools
 from agent.tools.agent_tools import *
 from agent.tools.middleware import *
@@ -81,11 +77,17 @@ class ReactAgent:
         self._max_messages = int(agent_conf.get("conversation_max_messages", 40))
         self._recursion_limit = int(agent_conf.get("agent_recursion_limit", 40))
 
-    def _prepare_run(
-            self,
-            messages: list[dict],
-            user_id: str | None,
-    ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    def execute_stream(self, messages: list[dict], user_id: str | None = None):
+        """
+        执行一轮对话（messages 须包含本轮及之前所有 user/assistant，最后一条须为当前 user）。
+
+        Args:
+            messages: 对话消息列表
+            user_id: 当前用户标识；有则从长期记忆检索摘要/画像并注入 context
+
+        Yields:
+            str: 本轮助手回复的增量文本片段（拼接后与最终回复一致）。
+        """
         validate_chat_messages(messages)
         if not messages:
             raise ValueError("messages 不能为空")
@@ -95,52 +97,50 @@ class ReactAgent:
         trimmed = trim_conversation_messages(messages, self._max_messages)
         input_dict = {"messages": trimmed}
 
-        context: dict[str, Any] = {"report": False}
+        context = {"report": False}
         if user_id:
             query = (messages[-1].get("content") or "").strip()
             context.update(_inject_memory_context(user_id, query))
 
         run_config = {"recursion_limit": self._recursion_limit}
-        return input_dict, context, run_config
-
-    def iter_stream_events(
-            self,
-            messages: list[dict],
-            user_id: str | None = None,
-    ) -> Iterator[dict[str, Any]]:
-        """
-        流式执行一轮对话，产出结构化事件，供 Streamlit 等展示工具链。
-
-        Yields:
-            {"type": "tool_call", "name": str, "args_preview": str, "id": str}
-            {"type": "tool_result", "name": str, "content_preview": str, "tool_call_id": str}
-            {"type": "text_delta", "content": str}
-            {"type": "error", "content": str}
-        """
-        input_dict, context, run_config = self._prepare_run(messages, user_id)
-        stream_iter = self.agent.stream(
-            input_dict,
-            stream_mode="values",
-            context=context,
-            config=run_config,
-        )
-        yield from iter_stream_events_from_values_stream(
-            stream_iter,
-            recursion_limit=self._recursion_limit,
-        )
-
-    def execute_stream(self, messages: list[dict], user_id: str | None = None):
-        """
-        执行一轮对话（messages 须包含本轮及之前所有 user/assistant，最后一条须为当前 user）。
-
-        Yields:
-            str: 本轮助手回复的增量文本片段（拼接后与最终回复一致）。
-        """
-        for ev in self.iter_stream_events(messages, user_id=user_id):
-            if ev["type"] == "text_delta":
-                yield ev["content"]
-            elif ev["type"] == "error":
-                yield ev["content"]
+        prev_assistant_text = ""
+        try:
+            stream_iter = self.agent.stream(
+                input_dict,
+                stream_mode="values",
+                context=context,
+                config=run_config,
+            )
+            for chunk in stream_iter:
+                raw_msgs = chunk.get("messages") or []
+                if not raw_msgs:
+                    continue
+                latest = raw_msgs[-1]
+                if not isinstance(latest, AIMessage):
+                    continue
+                text = (latest.content or "").strip()
+                if not text:
+                    continue
+                if len(text) > len(prev_assistant_text) and text.startswith(
+                        prev_assistant_text
+                ):
+                    delta = text[len(prev_assistant_text):]
+                    prev_assistant_text = text
+                    if delta:
+                        yield delta
+                elif text != prev_assistant_text:
+                    prev_assistant_text = text
+                    yield text + ("\n" if not text.endswith("\n") else "")
+        except GraphRecursionError as e:
+            logger.warning(
+                "[agent] 已达图执行步数上限 agent_recursion_limit=%s: %s",
+                self._recursion_limit,
+                e,
+            )
+            yield (
+                "\n\n[提示] 本轮智能体推理步数已达上限，已停止。"
+                "若问题较复杂，可拆成更短的问题分步提问，或在配置中适当调大 agent_recursion_limit。"
+            )
 
 
 if __name__ == "__main__":
@@ -151,3 +151,7 @@ if __name__ == "__main__":
         print(piece, end="", flush=True)
         parts.append(piece)
     print()
+    history.append({"role": "assistant", "content": "".join(parts)})
+    history.append({"role": "user", "content": "刚才说的第一步再讲细一点"})
+    for piece in agent.execute_stream(history):
+        print(piece, end="", flush=True)
