@@ -4,6 +4,7 @@ import streamlit as st
 
 from agent.react_agent import ReactAgent
 from memory.history_store import get_history_store
+from utils.config_utils import agent_conf
 from utils.log_utils import set_session_id
 
 # 标题
@@ -76,21 +77,67 @@ if prompt:
     set_session_id(user_id)
 
     full_parts: list[str] = []
-    with st.spinner("agent思考中..."):
-        messages_for_agent = list(st.session_state["chat_messages"])
+    messages_for_agent = list(st.session_state["chat_messages"])
+    show_tool_trace = bool(agent_conf.get("streamlit_show_tool_trace", True))
+    _status_fn = getattr(st, "status", None)
 
+    with st.chat_message("assistant"):
+        trace_area = st.container()
+        answer_ph = st.empty()
+        if show_tool_trace and _status_fn is not None:
+            with trace_area:
+                with _status_fn("工具与推理步骤", expanded=True) as status:
+                    for ev in st.session_state["agent"].iter_stream_events(
+                            messages_for_agent, user_id=user_id or None
+                    ):
+                        if ev["type"] == "tool_call":
+                            nm = ev.get("name") or "?"
+                            ap = (ev.get("args_preview") or "").strip() or "（无参数）"
+                            status.write(f"调用工具 **{nm}**  ·  参数: `{ap}`")
+                        elif ev["type"] == "tool_result":
+                            nm = ev.get("name") or "?"
+                            cp = (ev.get("content_preview") or "").strip() or "（空）"
+                            status.write(f"工具 **{nm}** 返回: `{cp}`")
+                        elif ev["type"] == "text_delta":
+                            full_parts.append(ev["content"])
+                            answer_ph.markdown("".join(full_parts))
+                        elif ev["type"] == "error":
+                            full_parts.append(ev["content"])
+                            answer_ph.markdown("".join(full_parts))
+        elif show_tool_trace:
+            with trace_area:
+                with st.expander("工具与推理步骤", expanded=True):
+                    for ev in st.session_state["agent"].iter_stream_events(
+                            messages_for_agent, user_id=user_id or None
+                    ):
+                        if ev["type"] == "tool_call":
+                            nm = ev.get("name") or "?"
+                            ap = (ev.get("args_preview") or "").strip() or "（无参数）"
+                            st.write(f"调用工具 **{nm}**  ·  `{ap}`")
+                        elif ev["type"] == "tool_result":
+                            nm = ev.get("name") or "?"
+                            cp = (ev.get("content_preview") or "").strip() or "（空）"
+                            st.write(f"**{nm}** 返回: `{cp}`")
+                        elif ev["type"] == "text_delta":
+                            full_parts.append(ev["content"])
+                            answer_ph.markdown("".join(full_parts))
+                        elif ev["type"] == "error":
+                            full_parts.append(ev["content"])
+                            answer_ph.markdown("".join(full_parts))
+        else:
+            with trace_area:
+                with st.spinner("agent思考中..."):
 
-        def stream_chars():
-            for piece in st.session_state["agent"].execute_stream(
-                    messages_for_agent, user_id=user_id or None
-            ):
-                full_parts.append(piece)
-                for char in piece:
-                    time.sleep(0.01)
-                    yield char
+                    def stream_chars():
+                        for piece in st.session_state["agent"].execute_stream(
+                                messages_for_agent, user_id=user_id or None
+                        ):
+                            full_parts.append(piece)
+                            for char in piece:
+                                time.sleep(0.01)
+                                yield char
 
-
-        st.chat_message("assistant").write_stream(stream_chars())
+                    answer_ph.write_stream(stream_chars())
 
     assistant_text = "".join(full_parts)
     st.session_state["chat_messages"].append(
