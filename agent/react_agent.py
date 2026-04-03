@@ -16,6 +16,7 @@ from utils.config_utils import agent_conf
 from utils.log_utils import logger
 from utils.memory_inject import memory_inject_flags
 from utils.memory_utils import trim_conversation_messages, validate_chat_messages
+from utils.prompt_utils import load_system_prompts
 
 
 def _inject_memory_context(user_id: str, query: str) -> dict:
@@ -77,31 +78,17 @@ class ReactAgent:
         self._max_messages = int(agent_conf.get("conversation_max_messages", 40))
         self._recursion_limit = int(agent_conf.get("agent_recursion_limit", 40))
 
-    def execute_stream(self, messages: list[dict], user_id: str | None = None):
-        """
-        执行一轮对话（messages 须包含本轮及之前所有 user/assistant，最后一条须为当前 user）。
-
-        Args:
-            messages: 对话消息列表
-            user_id: 当前用户标识；有则从长期记忆检索摘要/画像并注入 context
-
-        Yields:
-            str: 本轮助手回复的增量文本片段（拼接后与最终回复一致）。
-        """
-        validate_chat_messages(messages)
-        if not messages:
-            raise ValueError("messages 不能为空")
-        if messages[-1].get("role") != "user":
-            raise ValueError("messages 最后一条须为 user")
-
-        trimmed = trim_conversation_messages(messages, self._max_messages)
-        input_dict = {"messages": trimmed}
-
-        context = {"report": False}
+    @staticmethod
+    def _build_context(user_id: str | None, memory_query_for_inject: str) -> dict:
+        context: dict = {"report": False}
         if user_id:
-            query = (messages[-1].get("content") or "").strip()
-            context.update(_inject_memory_context(user_id, query))
+            context.update(
+                _inject_memory_context(user_id, (memory_query_for_inject or "").strip())
+            )
+        return context
 
+    def _iter_assistant_stream(self, trimmed: list[dict], context: dict):
+        input_dict = {"messages": trimmed}
         run_config = {"recursion_limit": self._recursion_limit}
         prev_assistant_text = ""
         try:
@@ -122,9 +109,9 @@ class ReactAgent:
                 if not text:
                     continue
                 if len(text) > len(prev_assistant_text) and text.startswith(
-                        prev_assistant_text
+                    prev_assistant_text
                 ):
-                    delta = text[len(prev_assistant_text):]
+                    delta = text[len(prev_assistant_text) :]
                     prev_assistant_text = text
                     if delta:
                         yield delta
@@ -141,6 +128,74 @@ class ReactAgent:
                 "\n\n[提示] 本轮智能体推理步数已达上限，已停止。"
                 "若问题较复杂，可拆成更短的问题分步提问，或在配置中适当调大 agent_recursion_limit。"
             )
+
+    def execute_stream(self, messages: list[dict], user_id: str | None = None):
+        """
+        执行一轮对话（messages 须包含本轮及之前所有 user/assistant，最后一条须为当前 user）。
+
+        Args:
+            messages: 对话消息列表
+            user_id: 当前用户标识；有则从长期记忆检索摘要/画像并注入 context
+
+        Yields:
+            str: 本轮助手回复的增量文本片段（拼接后与最终回复一致）。
+            若开启 reflection：先发主回答流式增量，结束后再做审核；未达标则继续 yield 修正轮增量。
+        """
+        # 验证信息
+        validate_chat_messages(messages)
+        if not messages:
+            raise ValueError("messages 不能为空")
+        if messages[-1].get("role") != "user":
+            raise ValueError("messages 最后一条须为 user")
+
+        # 消息最大轮次控制
+        trimmed = trim_conversation_messages(messages, self._max_messages)
+        # 本轮用户原文：记忆注入与自检都用它；修正轮时也不能改成审核反馈里的句子去检索
+        original_query = (messages[-1].get("content") or "").strip()
+        # 长期记忆注入（进 LangGraph context，由中间件拼进 system）
+        ctx0 = self._build_context(user_id, original_query)
+
+        # 主回答：LangGraph 流式增量，同时拼出完整 draft 供后面自检
+        draft_parts: list[str] = []
+        for delta in self._iter_assistant_stream(trimmed, ctx0):
+            draft_parts.append(delta)
+            yield delta
+        draft = "".join(draft_parts)
+
+        # reflection 未开启，或主回答为空：不再自检、不加轮
+        if not bool(agent_conf.get("reflection_enabled", False)):
+            return
+        if not draft.strip():
+            return
+
+        # 主回答流结束后的 LLM 自检（见 config/agent.yml reflection_*）
+        from agent.reflect_critique import reflect_critique_score
+
+        min_score = float(agent_conf.get("reflection_min_score", 0.65))
+        extra_turns = int(agent_conf.get("reflection_max_extra_turns", 1))
+        score, reason = reflect_critique_score(original_query, draft)
+        logger.info(
+            "[reflection] score=%.3f min=%.3f reason=%s",
+            score,
+            min_score,
+            (reason[:160] + "…") if len(reason) > 160 else reason,
+        )
+        # 分数达标或不允许额外轮次：结束
+        if score >= min_score or extra_turns <= 0:
+            return
+
+        # 修正轮：仅内存里追加 assistant+user，再流式；不入 session，记忆注入仍用 original_query
+        correction = (
+            f"审核反馈（仅供你改进回答，不要复述本句）：{reason or '质量不足'}。"
+            "请输出修正后的完整回答，直接面向用户，不要提及审核或修改过程。"
+        )
+        messages_retry = list(messages) + [
+            {"role": "assistant", "content": draft},
+            {"role": "user", "content": correction},
+        ]
+        trimmed2 = trim_conversation_messages(messages_retry, self._max_messages)
+        ctx1 = self._build_context(user_id, original_query)
+        yield from self._iter_assistant_stream(trimmed2, ctx1)
 
 
 if __name__ == "__main__":

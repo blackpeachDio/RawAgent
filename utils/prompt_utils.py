@@ -59,6 +59,24 @@ def load_judge_prompts():
         raise e
 
 
+def load_reflect_critique_prompts() -> str:
+    """在线自检；占位符 <<<USER_QUESTION>>>、<<<DRAFT_ANSWER>>>。"""
+    try:
+        path_key = prompts_conf.get(
+            "reflect_critique_prompt_path",
+            "../prompts/reflect_critique_prompt.txt",
+        )
+        path = get_abs_path(path_key)
+    except Exception as e:
+        logger.error("[load_reflect_critique_prompts] 路径解析失败: %s", e)
+        raise
+    try:
+        return open(path, "r", encoding="utf-8").read()
+    except Exception as e:
+        logger.error("[load_reflect_critique_prompts] 读取失败: %s", e)
+        raise
+
+
 def load_mem_extract_prompts():
     try:
         prompt_path = prompts_conf.get("mem_extract_prompt_path", "../prompts/mem_extract_prompt.txt")

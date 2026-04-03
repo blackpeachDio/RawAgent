@@ -1,7 +1,8 @@
 main_prompt_path: ../prompts/main_prompt.txt #主提示词
 rag_summarize_prompt_path: ../prompts/rag_summarize.txt #总结
 report_prompt_path: ../prompts/report_prompt.txt #报告
-judge_prompt_path: ../prompts/judge_prompt.txt #幻觉裁判
+judge_prompt_path: ../prompts/judge_prompt.txt #幻觉裁判（需 ground_truth，离线 eval）
+reflect_critique_prompt_path: ../prompts/reflect_critique_prompt.txt # 在线自检（无标准答案）
 mem_extract_prompt_path: ../prompts/mem_extract_prompt.txt #记忆提取（事实+事件）
 mem_inject_prompt_path: ../prompts/mem_inject_prompt.txt #system 中拼接「用户记忆」+ 主提示词
 memory_inject_classifier_prompt_path: ../prompts/memory_inject_classifier.txt # auto+llm：是否注入事实/向量记忆
