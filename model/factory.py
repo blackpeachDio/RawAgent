@@ -25,6 +25,32 @@ def _chat_model_kwargs() -> dict:
     return m
 
 
+def default_turbo_chat_model_name() -> str:
+    """轻量任务默认模型名（与主模型 rag.yml chat_model_name 分离）。"""
+    return (rag_conf.get("turbo_chat_model_name") or "qwen-turbo").strip()
+
+
+def make_turbo_chat_model(
+    *,
+    model: str | None = None,
+    max_tokens: int = 2048,
+    temperature: float = 0,
+) -> ChatTongyi:
+    """
+    构造 DashScope 轻量 ChatTongyi；model 为空时用 default_turbo_chat_model_name()。
+    各场景按需传入 max_tokens / temperature（与主模型 chat_* 无关）。
+    """
+    name = (model or "").strip() or default_turbo_chat_model_name()
+    return ChatTongyi(
+        dashscope_api_key=api_conf["dashscope_api_key"],
+        model=name,
+        model_kwargs={
+            "temperature": float(temperature),
+            "max_tokens": int(max_tokens),
+        },
+    )
+
+
 class ChatModelFactory(BaseModelFactory):
     def generator(self) -> Optional[Embeddings | BaseChatModel]:
         return ChatTongyi(
@@ -43,3 +69,4 @@ class EmbeddingModelFactory(BaseModelFactory):
 
 chat_model = ChatModelFactory().generator()
 embedding_model = EmbeddingModelFactory().generator()
+turbo_model = make_turbo_chat_model(max_tokens=2048, temperature=0)

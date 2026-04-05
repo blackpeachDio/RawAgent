@@ -43,7 +43,7 @@ recall_warmup_on_startup: true
 # --- 查询改写：多路向量召回合并后再精排（提召回）---
 query_rewrite_enabled: true
 query_rewrite_max_variants: 2
-# 改写专用小模型（与 Agent/RAG 主模型 rag.yml 分离）；降延迟与成本
+# 改写专用小模型；不配或留空则用 rag.yml 的 turbo_chat_model_name
 query_rewrite_model: qwen-turbo
 query_rewrite_max_tokens: 256
 query_rewrite_temperature: 0

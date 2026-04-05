@@ -4,17 +4,18 @@ React Agent：支持多轮 messages；流式输出。
 模型用长期记忆（摘要、画像）：由 Agent 内部按 user_id 检索并注入 context。
 """
 from langchain.agents import create_agent
+from langchain.agents.middleware import SummarizationMiddleware
 from langchain_core.messages import AIMessage
 from langgraph.errors import GraphRecursionError
 
 from agent.mcp_loader import load_remote_mcp_tools_sync
-from raw_agent_skillkit import build_skill_tools
 from agent.tools.agent_tools import *
 from agent.tools.middleware import *
-from model.factory import chat_model
+from model.factory import chat_model, turbo_model
+from raw_agent_skillkit import build_skill_tools
 from utils.config_utils import agent_conf, chroma_conf
-from utils.log_utils import logger
 from utils.latency_trace import end_turn, note_assistant_stream_done, start_turn
+from utils.log_utils import logger
 from utils.memory_inject import memory_inject_flags
 from utils.memory_utils import trim_conversation_messages, validate_chat_messages
 from utils.prompt_utils import load_system_prompts
@@ -74,13 +75,24 @@ class ReactAgent:
                 *build_skill_tools(),
                 *mcp_tools,
             ],
-            middleware=[monitor_tool, log_before_model, build_system_prompt, log_wrap_model_tokens],
+            middleware=[
+                monitor_tool,
+                log_before_model,
+                build_system_prompt,
+                log_wrap_model_tokens,
+                SummarizationMiddleware(
+                    model=turbo_model,
+                    trigger=("messages", 5),
+                    keep=("messages", 2),
+                    summary_prompt="请摘要以下内容：\n\n{messages}",
+                ),
+            ],
         )
         self._max_messages = int(agent_conf.get("conversation_max_messages", 40))
         self._recursion_limit = int(agent_conf.get("agent_recursion_limit", 40))
 
         if bool(chroma_conf.get("rerank_preload_on_startup", True)) and bool(
-            chroma_conf.get("rerank_enabled", False)
+                chroma_conf.get("rerank_enabled", False)
         ):
             try:
                 from rag.retrieval_pipeline import preload_rerank_cross_encoder
@@ -120,9 +132,9 @@ class ReactAgent:
                 if not text:
                     continue
                 if len(text) > len(prev_assistant_text) and text.startswith(
-                    prev_assistant_text
+                        prev_assistant_text
                 ):
-                    delta = text[len(prev_assistant_text) :]
+                    delta = text[len(prev_assistant_text):]
                     prev_assistant_text = text
                     if delta:
                         yield delta

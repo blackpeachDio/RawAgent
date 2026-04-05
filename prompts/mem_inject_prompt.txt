@@ -1,6 +1,6 @@
-【用户记忆】
-{memory}
+{base}
 
 ---
 
-{base}
+【用户记忆】
+{memory}

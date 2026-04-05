@@ -5,7 +5,7 @@ memory_inject_mode: always
 
 # memory_inject_mode=auto 时：llm=轻量模型意图分类（默认）；keywords=子串匹配（旧逻辑，LLM 失败时也会回退）
 memory_inject_auto_strategy: llm
-# auto+llm：DashScope 模型名（宜轻量，如 qwen-turbo）；不配则 qwen-turbo
+# auto+llm：DashScope 模型名；不配则用 rag.yml turbo_chat_model_name
 # memory_inject_classifier_model: qwen-turbo
 
 # auto+keywords 或 LLM 回退：子串匹配。不配则代码内默认词表。
@@ -35,7 +35,7 @@ agent_recursion_limit: 40
 reflection_enabled: false
 reflection_min_score: 0.65
 reflection_max_extra_turns: 1
-# reflection_model: qwen-turbo
+# reflection_model: 不配则用主模型 chat_model；配了则用该名（可与 rag.yml turbo_chat_model_name 一致）
 
 # 事实性记忆存储（热插拔）：memory=内存，redis=Redis（后期）
 factual_store_type: memory

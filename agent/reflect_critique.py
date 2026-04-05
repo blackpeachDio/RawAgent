@@ -8,8 +8,8 @@ import time
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from model.factory import chat_model
-from utils.config_utils import agent_conf, api_conf, rag_conf
+from model.factory import chat_model, make_turbo_chat_model
+from utils.config_utils import agent_conf, rag_conf
 from utils.latency_trace import trace_id_or_dash
 from utils.log_utils import logger
 from utils.prompt_utils import load_reflect_critique_prompts
@@ -35,20 +35,12 @@ def _get_reflection_llm():
         return chat_model
     if _reflection_llm is not None and _reflection_llm_name == name:
         return _reflection_llm
-    from langchain_community.chat_models import ChatTongyi
 
-    mk: dict = {}
-    if rag_conf.get("chat_temperature") is not None:
-        mk["temperature"] = float(rag_conf["chat_temperature"])
-    if rag_conf.get("chat_max_tokens") is not None:
-        mk["max_tokens"] = int(rag_conf["chat_max_tokens"])
+    temp = float(rag_conf["chat_temperature"]) if rag_conf.get("chat_temperature") is not None else 0.0
+    max_tok = int(rag_conf["chat_max_tokens"]) if rag_conf.get("chat_max_tokens") is not None else 2048
 
     _reflection_llm_name = name
-    _reflection_llm = ChatTongyi(
-        dashscope_api_key=api_conf["dashscope_api_key"],
-        model=name,
-        model_kwargs=mk,
-    )
+    _reflection_llm = make_turbo_chat_model(model=name, max_tokens=max_tok, temperature=temp)
     return _reflection_llm
 
 

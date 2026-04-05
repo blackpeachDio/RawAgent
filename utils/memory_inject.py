@@ -7,7 +7,7 @@ from typing import Any
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from utils.config_utils import api_conf
+from model.factory import default_turbo_chat_model_name, make_turbo_chat_model
 from utils.log_utils import logger
 
 
@@ -98,17 +98,12 @@ def _classifier_prompt_text(query: str) -> str:
 
 def _get_classifier_llm(conf: dict[str, Any]) -> Any:
     global _classifier_llm, _classifier_llm_name
-    name = (conf.get("memory_inject_classifier_model") or "qwen-turbo").strip()
+    name = (conf.get("memory_inject_classifier_model") or "").strip() or default_turbo_chat_model_name()
     if _classifier_llm is not None and _classifier_llm_name == name:
         return _classifier_llm
-    from langchain_community.chat_models import ChatTongyi
 
     _classifier_llm_name = name
-    _classifier_llm = ChatTongyi(
-        dashscope_api_key=api_conf["dashscope_api_key"],
-        model=name,
-        model_kwargs={"temperature": 0, "max_tokens": 256},
-    )
+    _classifier_llm = make_turbo_chat_model(model=name, max_tokens=256, temperature=0)
     return _classifier_llm
 
 

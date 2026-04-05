@@ -10,7 +10,8 @@ from typing import Any, AsyncIterator, Iterator
 from langchain_community.chat_models import ChatTongyi
 from langchain_core.messages import HumanMessage
 
-from utils.config_utils import api_conf, chroma_conf
+from model.factory import default_turbo_chat_model_name, make_turbo_chat_model
+from utils.config_utils import chroma_conf
 from utils.log_utils import logger
 
 _rewrite_llm: ChatTongyi | None = None
@@ -39,17 +40,10 @@ def _get_rewrite_llm() -> ChatTongyi:
     global _rewrite_llm
     if _rewrite_llm is not None:
         return _rewrite_llm
-    name = (chroma_conf.get("query_rewrite_model") or "qwen-turbo").strip()
+    name = (chroma_conf.get("query_rewrite_model") or "").strip() or default_turbo_chat_model_name()
     max_tok = int(chroma_conf.get("query_rewrite_max_tokens", 256))
     temp = float(chroma_conf.get("query_rewrite_temperature", 0))
-    _rewrite_llm = ChatTongyi(
-        dashscope_api_key=api_conf["dashscope_api_key"],
-        model=name,
-        model_kwargs={
-            "temperature": temp,
-            "max_tokens": max_tok,
-        },
-    )
+    _rewrite_llm = make_turbo_chat_model(model=name, max_tokens=max_tok, temperature=temp)
     logger.info("[RAG] 查询改写模型: %s max_tokens=%s temperature=%s", name, max_tok, temp)
     return _rewrite_llm
 
