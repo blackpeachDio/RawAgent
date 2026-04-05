@@ -10,7 +10,7 @@ from langchain.agents.middleware import (
     dynamic_prompt,
     wrap_model_call,
     ModelRequest,
-    ModelResponse,
+    ModelResponse, after_model,
 )
 from langchain.tools.tool_node import ToolCallRequest
 from langchain_core.messages import ToolMessage
@@ -92,8 +92,16 @@ def log_before_model(
 ):         # 在模型执行前输出日志
     note_before_model()
     logger.info(f"[log_before_model]即将调用模型，带有{len(state['messages'])}条消息。")
+    print("before_model:", state)
     return None
 
+@after_model
+def after_model(
+        state: AgentState,          # 整个Agent智能体中的状态记录
+        runtime: Runtime,           # 记录了整个执行过程中的上下文信息
+):         # 在模型执行前输出日志
+    print("after_model:", state)
+    return None
 
 @wrap_model_call
 def log_wrap_model_tokens(

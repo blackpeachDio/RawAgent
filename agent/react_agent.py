@@ -80,11 +80,12 @@ class ReactAgent:
                 log_before_model,
                 build_system_prompt,
                 log_wrap_model_tokens,
+                after_model,
                 SummarizationMiddleware(
                     model=turbo_model,
                     trigger=("messages", 5),
                     keep=("messages", 2),
-                    summary_prompt="请摘要以下内容：\n\n{messages}",
+                    summary_prompt="请用简洁中文，客观总结下面的对话内容：\n\n{messages}",
                 ),
             ],
         )
