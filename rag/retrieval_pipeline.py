@@ -6,21 +6,20 @@ from __future__ import annotations
 
 import hashlib
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.documents import Document
-from langchain_core.messages import HumanMessage
-
 from rag.parent_store import get_parent_store
+from rag.query_embedding_cache import embed_queries_for_retrieval
+from rag.query_rewrite import rewrite_queries_cached
 from utils.config_utils import chroma_conf
+from utils.latency_trace import note_rag_retrieve_breakdown
 from utils.log_utils import logger
 
 if TYPE_CHECKING:
     from langchain_chroma import Chroma
-
-from model.factory import chat_model
-
 
 def _apply_hf_hub_endpoint() -> None:
     if os.environ.get("HF_ENDPOINT"):
@@ -120,66 +119,46 @@ def _vector_search_chroma_batch(
         fetch_k: int,
 ) -> list[Document]:
     """
-    多路查询：单次 Chroma batch + 批量向量（embed_documents 或逐条 embed_query）。
-    多路时**必须**配置 LangChain Chroma 的 embedding_function；单路仍走 similarity_search。
+    向量召回：统一走 collection.query + 检索侧向量缓存。
+    DashScope 使用 text_type=query 批量嵌入（避免误用 document 类型）；重复问句命中 LRU 则跳过远程。
     """
     if not queries:
         return []
-    if len(queries) == 1:
-        return vector_store.similarity_search(queries[0], k=fetch_k)
-
     emb = getattr(vector_store, "_embedding_function", None)
     if emb is None:
         raise ValueError(
-            "多路向量检索必须配置 embedding 模型：Chroma 初始化时需传入 embedding_function（见 rag/online_query 等）。"
+            "向量检索必须配置 embedding_function（见 rag/online_query 等）。"
         )
-
     try:
         col = vector_store._collection  # noqa: SLF001
-        if hasattr(emb, "embed_documents"):
-            vecs = emb.embed_documents(queries)
-        else:
-            vecs = [emb.embed_query(q) for q in queries]
+        vecs = embed_queries_for_retrieval(emb, queries)
         raw = col.query(query_embeddings=vecs, n_results=fetch_k)
         return _chroma_query_result_to_documents(raw)
     except Exception as e:
-        logger.warning("[RAG] Chroma 批量查询失败，回退逐条 similarity_search: %s", e)
+        logger.warning("[RAG] Chroma query 失败，回退 similarity_search: %s", e)
         pool: list[Document] = []
         for q in queries:
             pool.extend(vector_store.similarity_search(q, k=fetch_k))
         return pool
 
 
+def warmup_vector_retrieval(vector_store: Chroma, *, sample_query: str = " ") -> None:
+    """预热 Chroma + 查询嵌入链路（DashScope 仍会有一次网络；后续同会话命中缓存）。"""
+    if not bool(chroma_conf.get("recall_warmup_on_startup", False)):
+        return
+    t0 = time.perf_counter()
+    try:
+        q = (sample_query or " ").strip() or " "
+        _vector_search_chroma_batch(vector_store, [q], 1)
+        logger.info("[RAG] 向量召回预热完成 wall_s=%.4f", time.perf_counter() - t0)
+    except Exception as e:
+        logger.warning("[RAG] 向量召回预热失败: %s", e)
+
+
 def rewrite_queries_for_retrieval(user_query: str) -> list[str]:
-    """在原问题基础上生成若干检索用语，提高召回。"""
+    """在原问题基础上生成若干检索用语；独立小模型 + 缓存 + 优先异步 ainvoke（见 rag/query_rewrite.py）。"""
     max_v = int(chroma_conf.get("query_rewrite_max_variants", 2))
-    if max_v <= 0:
-        return [user_query.strip()]
-
-    prompt = f"""你是检索查询扩展助手。下面是一条用户问题，请再写出 {max_v} 个**不同表述**的短查询句，用于在同一知识库中做向量检索。
-要求：只输出短句本身，每行一条，不要编号、不要解释、不要重复原句。
-
-用户问题：
-{user_query.strip()}
-"""
-    msg = HumanMessage(content=prompt)
-    out = chat_model.invoke([msg])
-    text = (out.content or "").strip()
-    lines = []
-    for line in text.splitlines():
-        line = line.strip().strip("•-*0123456789.、)）")
-        if line and len(line) > 2:
-            lines.append(line)
-    seen = {user_query.strip()}
-    variants: list[str] = [user_query.strip()]
-    for line in lines:
-        if line not in seen:
-            seen.add(line)
-            variants.append(line)
-        if len(variants) >= max_v + 1:
-            break
-    logger.info("[RAG] 查询改写: %s 条变体 | %s", len(variants), variants)
-    return variants
+    return rewrite_queries_cached(user_query, max_v)
 
 
 def build_bm25_retriever(vector_store: Chroma):
@@ -268,6 +247,28 @@ def get_cached_cross_encoder():
     return cross
 
 
+def preload_rerank_cross_encoder() -> None:
+    """
+    进程内提前加载 BGE CrossEncoder（与 retrieve_documents 共用缓存）。
+    在 rerank_enabled=true 时由 ReactAgent 初始化调用，避免首次 RAG 才加载导致首问卡顿。
+    """
+    if not bool(chroma_conf.get("rerank_enabled", False)):
+        logger.debug("[RAG] rerank_enabled=false，跳过 BGE CrossEncoder 预加载")
+        return
+    try:
+        t0 = time.perf_counter()
+        get_cached_cross_encoder()
+        logger.info(
+            "[RAG] BGE CrossEncoder 启动预加载完成 wall_s=%.3f",
+            time.perf_counter() - t0,
+        )
+    except Exception as e:
+        logger.warning(
+            "[RAG] BGE CrossEncoder 启动预加载失败，将在首次需要重排时再加载: %s",
+            e,
+        )
+
+
 def retrieve_documents(
         vector_store: Chroma,
         query: str,
@@ -291,11 +292,18 @@ def retrieve_documents(
     hybrid_on = bool(chroma_conf.get("hybrid_bm25_enabled", False))
     merge_cap = int(chroma_conf.get("merge_max_pool", 60))
 
-    queries = rewrite_queries_for_retrieval(query) if rewrite_on else [query.strip()]
+    rewrite_s = 0.0
+    if rewrite_on:
+        t_rw = time.perf_counter()
+        queries = rewrite_queries_for_retrieval(query)
+        rewrite_s = time.perf_counter() - t_rw
+    else:
+        queries = [query.strip()]
 
     pool: list[Document] = []
     do_bm25 = hybrid_on and bm25_retriever is not None
 
+    t_re = time.perf_counter()
     with ThreadPoolExecutor(max_workers=2) as ex:
         vec_fut = ex.submit(_vector_search_chroma_batch, vector_store, queries, fetch_k)
         bm25_fut = ex.submit(bm25_retriever.invoke, query) if do_bm25 else None
@@ -311,19 +319,49 @@ def retrieve_documents(
                 logger.warning("[RAG] BM25 检索失败，仅用向量: %s", e)
 
     pool = dedupe_documents(pool)[:merge_cap]
+    recall_s = time.perf_counter() - t_re
 
     rerank_on = bool(chroma_conf.get("rerank_enabled", False))
     if not pool:
+        note_rag_retrieve_breakdown(
+            rewrite_on=rewrite_on,
+            rewrite_s=rewrite_s,
+            recall_s=recall_s,
+            rerank_on=rerank_on,
+            rerank_s=0.0,
+            expand_s=0.0,
+            pool_len=0,
+            out_len=0,
+        )
         return []
 
+    rerank_s = 0.0
+    expand_s = 0.0
+    out_len = 0
+
     if not rerank_on:
-        return expand_parent_documents(pool[:final_k])
+        t_exp = time.perf_counter()
+        out = expand_parent_documents(pool[:final_k])
+        expand_s = time.perf_counter() - t_exp
+        out_len = len(out)
+        note_rag_retrieve_breakdown(
+            rewrite_on=rewrite_on,
+            rewrite_s=rewrite_s,
+            recall_s=recall_s,
+            rerank_on=False,
+            rerank_s=0.0,
+            expand_s=expand_s,
+            pool_len=len(pool),
+            out_len=out_len,
+        )
+        return out
 
     try:
         cross = get_cached_cross_encoder()
     except ImportError as e:
         raise ImportError("BGE 精排需: pip install sentence-transformers langchain-classic") from e
 
+    t_rr = time.perf_counter()
     pairs = [(query.strip(), d.page_content) for d in pool]
     raw_scores = cross.score(pairs)
     scores = list(raw_scores)
@@ -341,9 +379,35 @@ def retrieve_documents(
                 best,
                 thr,
             )
+            rerank_s = time.perf_counter() - t_rr
+            note_rag_retrieve_breakdown(
+                rewrite_on=rewrite_on,
+                rewrite_s=rewrite_s,
+                recall_s=recall_s,
+                rerank_on=True,
+                rerank_s=rerank_s,
+                expand_s=0.0,
+                pool_len=len(pool),
+                out_len=0,
+            )
             return []
 
-    return expand_parent_documents(top_docs)
+    rerank_s = time.perf_counter() - t_rr
+    t_exp = time.perf_counter()
+    out = expand_parent_documents(top_docs)
+    expand_s = time.perf_counter() - t_exp
+    out_len = len(out)
+    note_rag_retrieve_breakdown(
+        rewrite_on=rewrite_on,
+        rewrite_s=rewrite_s,
+        recall_s=recall_s,
+        rerank_on=True,
+        rerank_s=rerank_s,
+        expand_s=expand_s,
+        pool_len=len(pool),
+        out_len=out_len,
+    )
+    return out
 
 
 REFUSAL_MESSAGE = "当前知识库中未检索到与您问题足够相关的可靠资料，暂无法基于资料作答。请尝试换一种问法或联系人工客服。"

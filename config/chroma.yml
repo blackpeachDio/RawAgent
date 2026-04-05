@@ -14,11 +14,14 @@ memory_ttl_days: 90
 # 无 query 时（若调用 get_relevant_all）从库中拉取的最大条数再排序截断
 memory_list_user_max_cap: 80
 # 向量粗排从 Chroma 取回的条数；仅当 rerank_enabled 为 true 时生效，应 >= k
-fetch_k: 20
+# 过大则 Chroma 与重排都变慢；追求低延迟可先试 8～12
+fetch_k: 12
 # 精排后进入 RAG 上下文的条数（CrossEncoder top_n）
 k: 3
 # 是否启用 BGE CrossEncoder 精排（需 sentence-transformers）
-rerank_enabled: false
+rerank_enabled: true
+# 创建 ReactAgent 时预加载 BGE（避免首次 RAG 才加载）；仅 rerank_enabled=true 时生效
+rerank_preload_on_startup: true
 # 访问 huggingface.co 超时：填镜像（等价于环境变量 HF_ENDPOINT）。国内可试 https://hf-mirror.com
 hf_endpoint: https://hf-mirror.com
 # HuggingFace 模型 id；或已下载到本地的文件夹路径（也可用 ../models/xxx 相对 utils 根）
@@ -32,9 +35,22 @@ rerank_trust_remote_code: false
 # 精排分数（越高越相关，刻度因模型而异）：低于 rerank_refuse_min_score 则拒答（不返回片段）；不填则关闭
 # rerank_refuse_min_score: -20.0
 
+# 检索用查询向量 LRU（重复/改写命中相同子串时跳过 DashScope）；0=关闭
+query_embedding_cache_max_entries: 2048
+# 进程内首次创建 OnlineQueryService 时做一次极轻量检索，预热 Chroma + 嵌入链路
+recall_warmup_on_startup: true
+
 # --- 查询改写：多路向量召回合并后再精排（提召回）---
-query_rewrite_enabled: false
+query_rewrite_enabled: true
 query_rewrite_max_variants: 2
+# 改写专用小模型（与 Agent/RAG 主模型 rag.yml 分离）；降延迟与成本
+query_rewrite_model: qwen-turbo
+query_rewrite_max_tokens: 256
+query_rewrite_temperature: 0
+# true：走 stream/astream 聚合全文（部分链路首包更早）；false：invoke/ainvoke
+query_rewrite_stream: true
+# 改写结果 LRU 条数；0 表示关闭缓存（同句重复问命中则跳 LLM）
+query_rewrite_cache_max_entries: 512
 # 合并去重后参与 BGE 打分的最大条数
 merge_max_pool: 60
 

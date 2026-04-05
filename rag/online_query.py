@@ -2,6 +2,8 @@
 在线查询：连接已有 Chroma 索引，检索 + 总结（RAG），供 Agent 工具调用。
 检索：可选查询改写、可选 BM25 混合、向量粗排、合并去重、BGE 精排、可选分数拒答。
 """
+import time
+
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
@@ -9,8 +11,14 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableLambda
 
 from model.factory import chat_model, embedding_model
-from rag.retrieval_pipeline import REFUSAL_MESSAGE, build_bm25_retriever, retrieve_documents
+from rag.retrieval_pipeline import (
+    REFUSAL_MESSAGE,
+    build_bm25_retriever,
+    retrieve_documents,
+    warmup_vector_retrieval,
+)
 from utils.config_utils import chroma_conf
+from utils.latency_trace import note_rag_generate, trace_id_or_dash
 from utils.log_utils import logger
 from utils.path_utils import get_abs_path
 from utils.prompt_utils import load_rag_prompts
@@ -41,6 +49,7 @@ class OnlineQueryService:
             persist_directory=persist_dir,
         )
         self._bm25_retriever = None
+        warmup_vector_retrieval(self.vector_store)
 
     def get_retriever(self):
         def _pipe(q: str) -> list[Document]:
@@ -71,7 +80,13 @@ class RagSummarizeService(object):
         return self.retriever.invoke(query)
 
     def rag_summarize(self, query: str) -> str:
+        t_ret = time.perf_counter()
         context_docs = self.retriever_docs(query)
+        logger.info(
+            "[latency] trace=%s phase=rag_retriever_invoke wall_s=%.4f (含检索管线内各子阶段，见 rag_retrieve)",
+            trace_id_or_dash(),
+            time.perf_counter() - t_ret,
+        )
 
         if not context_docs:
             logger.warning("[RAG] 无可用检索片段或已触发拒答阈值 | 用户问题: %s", query)
@@ -98,12 +113,14 @@ class RagSummarizeService(object):
         except Exception as e:
             logger.warning("[RAG] 打印 prompt 失败：%s", str(e))
 
+        t_gen = time.perf_counter()
         result = self.chain.invoke(
             {
                 "input": query,
                 "context": context,
             }
         )
+        note_rag_generate(time.perf_counter() - t_gen)
 
         # 打印 rag_summarize 最终总结结果，便于排查“模型是怎么基于参考资料输出的”
         try:

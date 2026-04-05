@@ -20,7 +20,11 @@ memory_extract_max_rounds: 3
 # 提取上下文最大字符数（从最早轮开始丢弃以满足预算）
 memory_extract_max_context_chars: 12000
 
-# 多轮对话：传入模型的消息条数上限（user/assistant 交替计数）；超出则丢弃最早的消息
+# 每次主 Agent 调 LLM 前是否用 tiktoken 估算输入 token（含 tools schema，条目多时会明显拖慢首包）
+# 生产环境建议 false；需要成本排查时再开
+agent_llm_token_estimate_enabled: false
+
+# 多轮对话：传入模型的 user/assistant 字典条数上限；超出则丢弃最早的消息；<=0 不截断
 conversation_max_messages: 40
 
 # Agent 图执行步数上限（LangGraph recursion_limit）：每次 model / tools / 中间件节点跳转计一步。

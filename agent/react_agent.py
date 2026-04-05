@@ -12,8 +12,9 @@ from raw_agent_skillkit import build_skill_tools
 from agent.tools.agent_tools import *
 from agent.tools.middleware import *
 from model.factory import chat_model
-from utils.config_utils import agent_conf
+from utils.config_utils import agent_conf, chroma_conf
 from utils.log_utils import logger
+from utils.latency_trace import end_turn, note_assistant_stream_done, start_turn
 from utils.memory_inject import memory_inject_flags
 from utils.memory_utils import trim_conversation_messages, validate_chat_messages
 from utils.prompt_utils import load_system_prompts
@@ -77,6 +78,16 @@ class ReactAgent:
         )
         self._max_messages = int(agent_conf.get("conversation_max_messages", 40))
         self._recursion_limit = int(agent_conf.get("agent_recursion_limit", 40))
+
+        if bool(chroma_conf.get("rerank_preload_on_startup", True)) and bool(
+            chroma_conf.get("rerank_enabled", False)
+        ):
+            try:
+                from rag.retrieval_pipeline import preload_rerank_cross_encoder
+
+                preload_rerank_cross_encoder()
+            except Exception as e:
+                logger.warning("[RAG] CrossEncoder 预加载未执行: %s", e)
 
     @staticmethod
     def _build_context(user_id: str | None, memory_query_for_inject: str) -> dict:
@@ -148,54 +159,62 @@ class ReactAgent:
         if messages[-1].get("role") != "user":
             raise ValueError("messages 最后一条须为 user")
 
-        # 消息最大轮次控制
         trimmed = trim_conversation_messages(messages, self._max_messages)
         # 本轮用户原文：记忆注入与自检都用它；修正轮时也不能改成审核反馈里的句子去检索
         original_query = (messages[-1].get("content") or "").strip()
-        # 长期记忆注入（进 LangGraph context，由中间件拼进 system）
-        ctx0 = self._build_context(user_id, original_query)
+        start_turn(original_query)
+        try:
+            # 长期记忆注入（进 LangGraph context，由中间件拼进 system）
+            ctx0 = self._build_context(user_id, original_query)
 
-        # 主回答：LangGraph 流式增量，同时拼出完整 draft 供后面自检
-        draft_parts: list[str] = []
-        for delta in self._iter_assistant_stream(trimmed, ctx0):
-            draft_parts.append(delta)
-            yield delta
-        draft = "".join(draft_parts)
+            # 主回答：LangGraph 流式增量，同时拼出完整 draft 供后面自检
+            draft_parts: list[str] = []
+            for delta in self._iter_assistant_stream(trimmed, ctx0):
+                draft_parts.append(delta)
+                yield delta
+            draft = "".join(draft_parts)
+            note_assistant_stream_done("main", len(draft))
 
-        # reflection 未开启，或主回答为空：不再自检、不加轮
-        if not bool(agent_conf.get("reflection_enabled", False)):
-            return
-        if not draft.strip():
-            return
+            # reflection 未开启，或主回答为空：不再自检、不加轮
+            if not bool(agent_conf.get("reflection_enabled", False)):
+                return
+            if not draft.strip():
+                return
 
-        # 主回答流结束后的 LLM 自检（见 config/agent.yml reflection_*）
-        from agent.reflect_critique import reflect_critique_score
+            # 主回答流结束后的 LLM 自检（见 config/agent.yml reflection_*）
+            from agent.reflect_critique import reflect_critique_score
 
-        min_score = float(agent_conf.get("reflection_min_score", 0.65))
-        extra_turns = int(agent_conf.get("reflection_max_extra_turns", 1))
-        score, reason = reflect_critique_score(original_query, draft)
-        logger.info(
-            "[reflection] score=%.3f min=%.3f reason=%s",
-            score,
-            min_score,
-            (reason[:160] + "…") if len(reason) > 160 else reason,
-        )
-        # 分数达标或不允许额外轮次：结束
-        if score >= min_score or extra_turns <= 0:
-            return
+            min_score = float(agent_conf.get("reflection_min_score", 0.65))
+            extra_turns = int(agent_conf.get("reflection_max_extra_turns", 1))
+            score, reason = reflect_critique_score(original_query, draft)
+            logger.info(
+                "[reflection] score=%.3f min=%.3f reason=%s",
+                score,
+                min_score,
+                (reason[:160] + "…") if len(reason) > 160 else reason,
+            )
+            # 分数达标或不允许额外轮次：结束
+            if score >= min_score or extra_turns <= 0:
+                return
 
-        # 修正轮：仅内存里追加 assistant+user，再流式；不入 session，记忆注入仍用 original_query
-        correction = (
-            f"审核反馈（仅供你改进回答，不要复述本句）：{reason or '质量不足'}。"
-            "请输出修正后的完整回答，直接面向用户，不要提及审核或修改过程。"
-        )
-        messages_retry = list(messages) + [
-            {"role": "assistant", "content": draft},
-            {"role": "user", "content": correction},
-        ]
-        trimmed2 = trim_conversation_messages(messages_retry, self._max_messages)
-        ctx1 = self._build_context(user_id, original_query)
-        yield from self._iter_assistant_stream(trimmed2, ctx1)
+            # 修正轮：仅内存里追加 assistant+user，再流式；不入 session，记忆注入仍用 original_query
+            correction = (
+                f"审核反馈（仅供你改进回答，不要复述本句）：{reason or '质量不足'}。"
+                "请输出修正后的完整回答，直接面向用户，不要提及审核或修改过程。"
+            )
+            messages_retry = list(messages) + [
+                {"role": "assistant", "content": draft},
+                {"role": "user", "content": correction},
+            ]
+            trimmed2 = trim_conversation_messages(messages_retry, self._max_messages)
+            ctx1 = self._build_context(user_id, original_query)
+            fix_parts: list[str] = []
+            for delta in self._iter_assistant_stream(trimmed2, ctx1):
+                fix_parts.append(delta)
+                yield delta
+            note_assistant_stream_done("reflection", len("".join(fix_parts)))
+        finally:
+            end_turn()
 
 
 if __name__ == "__main__":
