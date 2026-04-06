@@ -40,6 +40,10 @@ reflection_max_extra_turns: 1
 # 事实性记忆存储（热插拔）：memory=内存，redis=Redis（后期）
 factual_store_type: memory
 
+# 记忆抽取任务队列：thread=进程内内存队列+守护线程；file=仅写 JSON 到目录，由 ``python -m memory.queue_consumer`` 消费
+memory_queue_mode: thread
+memory_queue_dir: ../data/memory_queue
+
 # hobby/character/preferences：每条 key 下最多保留多少条观察（JSON 数组，按时间合并去重）
 factual_multi_max_per_key: 24
 # 注入主模型时，每个多值 key 最多展示几条（按「日期衰减 + 与当前问句相关度」加权排序后取 top）

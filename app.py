@@ -94,13 +94,7 @@ if prompt:
     st.session_state["chat_messages"].append(
         {"role": "assistant", "content": assistant_text}
     )
-    # 长期记忆：持久化 assistant 回复
+    # 长期记忆：持久化 assistant 回复（记忆抽取在 Agent 后端 execute_stream 结束并入队，见 memory/memory_queue.py）
     if user_id:
         history_store.append_message(user_id, "assistant", assistant_text)
-        # 异步：提取事实与事件并分别存储到 FactualStore / ChromaMemoryStore
-        try:
-            from memory.extract_store import extract_and_store_async
-            extract_and_store_async(user_id, prompt, assistant_text)
-        except Exception:
-            pass
     st.rerun()

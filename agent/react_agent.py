@@ -21,6 +21,7 @@ from utils.memory_utils import trim_conversation_messages, validate_chat_message
 from utils.prompt_utils import load_system_prompts
 
 from memory.factual_multi import format_factual_block_for_injection
+from memory.memory_queue import enqueue_memory_job
 
 
 def _inject_memory_context(user_id: str, query: str) -> dict:
@@ -183,6 +184,7 @@ class ReactAgent:
         # 本轮用户原文：记忆注入与自检都用它；修正轮时也不能改成审核反馈里的句子去检索
         original_query = (messages[-1].get("content") or "").strip()
         start_turn(original_query)
+        all_emitted: list[str] = []
         try:
             # 长期记忆注入（进 LangGraph context，由中间件拼进 system）
             ctx0 = self._build_context(user_id, original_query)
@@ -191,6 +193,7 @@ class ReactAgent:
             draft_parts: list[str] = []
             for delta in self._iter_assistant_stream(trimmed, ctx0):
                 draft_parts.append(delta)
+                all_emitted.append(delta)
                 yield delta
             draft = "".join(draft_parts)
             note_assistant_stream_done("main", len(draft))
@@ -231,9 +234,16 @@ class ReactAgent:
             fix_parts: list[str] = []
             for delta in self._iter_assistant_stream(trimmed2, ctx1):
                 fix_parts.append(delta)
+                all_emitted.append(delta)
                 yield delta
             note_assistant_stream_done("reflection", len("".join(fix_parts)))
         finally:
+            try:
+                full_assistant = "".join(all_emitted)
+                if user_id and full_assistant.strip():
+                    enqueue_memory_job(user_id, original_query, full_assistant)
+            except Exception as e:
+                logger.warning("[agent] 记忆抽取入队失败: %s", e)
             end_turn()
 
 
