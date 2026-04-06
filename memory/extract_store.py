@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
 from typing import Any
 
@@ -12,10 +13,10 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 
 from memory.factual_multi import MULTI_FACT_KEYS, merge_append_multi
-from model.factory import chat_model
+from model.factory import chat_model, make_turbo_chat_model
 from utils.config_utils import agent_conf
 from utils.log_utils import logger
-from utils.prompt_utils import load_mem_extract_prompts
+from utils.prompt_utils import load_mem_extract_prompts, load_memory_extract_llm_gate_prompt
 
 ALLOWED_FACT_KEYS = frozenset(
     {"name", "age", "job", "city", "hobby", "character", "preferences", "avoid", "rules"}
@@ -66,6 +67,75 @@ def _truncate_rounds_by_char_budget(
     while r and len(_format_rounds_for_prompt(r)) > max_chars:
         r.pop(0)
     return r
+
+
+def _parse_worth_extracting_json(text: str) -> bool | None:
+    m = re.search(r"\{[\s\S]*\}", (text or "").strip())
+    if not m:
+        return None
+    try:
+        obj = json.loads(m.group())
+    except json.JSONDecodeError:
+        return None
+    v = obj.get("worth_extracting")
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, str):
+        return v.strip().lower() in ("true", "1", "yes")
+    if isinstance(v, (int, float)):
+        return bool(v)
+    return None
+
+
+def _llm_content_to_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, dict) and "text" in block:
+                parts.append(str(block["text"]))
+            else:
+                parts.append(str(block))
+        return "".join(parts)
+    return str(content or "")
+
+
+def _llm_gate_worth_extracting(user_msg: str, assistant_msg: str) -> bool:
+    """抽取主链路前：轻量模型判断本轮是否值得写入长期记忆。"""
+    if not bool(agent_conf.get("memory_extract_llm_gate_enabled", True)):
+        return True
+
+    max_u = int(agent_conf.get("memory_extract_gate_max_user_chars", 8000) or 8000)
+    max_a = int(agent_conf.get("memory_extract_gate_max_assistant_chars", 12000) or 12000)
+    u = (user_msg or "")[: max(500, max_u)]
+    a = (assistant_msg or "")[: max(500, max_a)]
+    if not a.strip():
+        return False
+
+    try:
+        from langchain_core.messages import HumanMessage
+
+        prompt = load_memory_extract_llm_gate_prompt()
+        body = prompt.format(user_msg=u, assistant_msg=a)
+        name = (agent_conf.get("memory_extract_gate_model") or "").strip() or None
+        max_t = int(agent_conf.get("memory_extract_gate_max_tokens", 256) or 256)
+        llm = make_turbo_chat_model(model=name, max_tokens=max_t, temperature=0)
+        out = llm.invoke([HumanMessage(content=body)])
+        text = _llm_content_to_text(getattr(out, "content", None)).strip()
+        parsed = _parse_worth_extracting_json(text)
+        if parsed is None:
+            logger.warning("[Memory] LLM gate 无法解析，默认继续抽取 | raw=%s", text[:300])
+            return True
+        logger.info(
+            "[Memory] LLM gate worth_extracting=%s | raw=%s",
+            parsed,
+            (text[:220] + "…") if len(text) > 220 else text,
+        )
+        return parsed
+    except Exception as e:
+        logger.warning("[Memory] LLM gate 调用失败，默认继续抽取: %s", e)
+        return True
 
 
 def _build_extraction_conversation(user_id: str, user_msg: str, assistant_msg: str) -> str:
@@ -193,6 +263,13 @@ def extract_and_store(user_id: str, user_msg: str, assistant_msg: str) -> None:
     """
     if not user_id:
         return
+    if not (assistant_msg or "").strip():
+        return
+
+    if not _llm_gate_worth_extracting(user_msg, assistant_msg):
+        logger.info("[Memory] LLM gate 判定本轮不值得抽取，跳过 user_id=%s", user_id)
+        return
+
     conversation = _build_extraction_conversation(user_id, user_msg, assistant_msg)
     facts, events = _extract_facts_and_events(conversation)
     if facts or events:
