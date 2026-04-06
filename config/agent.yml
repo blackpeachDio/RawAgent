@@ -39,3 +39,13 @@ reflection_max_extra_turns: 1
 
 # 事实性记忆存储（热插拔）：memory=内存，redis=Redis（后期）
 factual_store_type: memory
+
+# hobby/character/preferences：每条 key 下最多保留多少条观察（JSON 数组，按时间合并去重）
+factual_multi_max_per_key: 24
+# 注入主模型时，每个多值 key 最多展示几条（按「日期衰减 + 与当前问句相关度」加权排序后取 top）
+factual_multi_inject_top_n: 8
+# 加权：相关度（与当前 query 文本重叠）与日期新鲜度的权重，二者之和会自动归一化
+factual_multi_weight_recency: 0.35
+factual_multi_weight_relevance: 0.65
+# 日期半衰期（天）：越大则旧记忆在排序中衰减越慢
+factual_multi_recency_half_life_days: 30

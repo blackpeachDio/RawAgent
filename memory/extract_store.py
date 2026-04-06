@@ -11,6 +11,7 @@ from typing import Any
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 
+from memory.factual_multi import MULTI_FACT_KEYS, merge_append_multi
 from model.factory import chat_model
 from utils.config_utils import agent_conf
 from utils.log_utils import logger
@@ -116,12 +117,18 @@ def _extract_facts_and_events(conversation: str) -> tuple[list[dict], list[str]]
             facts = []
         if not isinstance(events, list):
             events = [str(events)] if events else []
-        # 过滤非法 fact key
-        facts = [
-            {"key": f["key"], "value": str(f.get("value", ""))}
-            for f in facts
-            if isinstance(f, dict) and f.get("key") in ALLOWED_FACT_KEYS
-        ]
+        # 过滤非法 fact key；hobby/character/preferences 可带 scenario（场景标签）
+        facts = []
+        for f in facts:
+            if not isinstance(f, dict) or f.get("key") not in ALLOWED_FACT_KEYS:
+                continue
+            facts.append(
+                {
+                    "key": f["key"],
+                    "value": str(f.get("value", "")),
+                    "scenario": str(f.get("scenario") or "").strip(),
+                }
+            )
         events = [str(e).strip() for e in events if e]
         return facts, events
     except json.JSONDecodeError as e:
@@ -143,11 +150,31 @@ def _store_extracted(user_id: str, facts: list[dict], events: list[str]) -> None
     factual = get_factual_store()
     vector_store = get_memory_store()
 
+    max_multi = max(4, int(agent_conf.get("factual_multi_max_per_key", 24) or 24))
+    snap = factual.get_all(user_id)
+
     for f in facts:
-        k, v = f.get("key", ""), f.get("value", "")
-        if k and v:
+        k = f.get("key", "")
+        v = str(f.get("value", "")).strip()
+        scenario = str(f.get("scenario") or "").strip()
+        if not k or not v:
+            continue
+        if k in MULTI_FACT_KEYS:
+            prev = snap.get(k, "")
+            merged = merge_append_multi(prev, v, scenario, max_per_key=max_multi)
+            factual.set(user_id, k, merged)
+            snap[k] = merged
+            logger.debug(
+                "[Memory] 合并多条事实 user_id=%s key=%s value=%s scenario=%s",
+                user_id,
+                k,
+                v[:80],
+                scenario or "-",
+            )
+        else:
             factual.set(user_id, k, v)
-            logger.debug("[Memory] 写入事实 user_id=%s key=%s value=%s", user_id, k, v)
+            snap[k] = v
+            logger.debug("[Memory] 写入事实 user_id=%s key=%s value=%s", user_id, k, v[:120])
 
     for evt in events:
         if evt:

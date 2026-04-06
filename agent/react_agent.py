@@ -20,6 +20,8 @@ from utils.memory_inject import memory_inject_flags
 from utils.memory_utils import trim_conversation_messages, validate_chat_messages
 from utils.prompt_utils import load_system_prompts
 
+from memory.factual_multi import format_factual_block_for_injection
+
 
 def _inject_memory_context(user_id: str, query: str) -> dict:
     """按 user_id 与配置注入：事实性画像（FactualStore）+ 向量记忆（经验/摘要/事件）。"""
@@ -39,8 +41,13 @@ def _inject_memory_context(user_id: str, query: str) -> dict:
 
             factual = get_factual_store().get_all(user_id)
             if factual:
-                lines = [f"{k}: {v}" for k, v in sorted(factual.items())]
-                parts.append("【用户画像】\n" + "\n".join(lines))
+                block = format_factual_block_for_injection(
+                    factual,
+                    (query or "").strip(),
+                    agent_conf,
+                )
+                if block.strip():
+                    parts.append("【用户画像】\n" + block)
         except Exception:
             pass
     if inject_vector:
