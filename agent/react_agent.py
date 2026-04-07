@@ -3,23 +3,15 @@ React Agent：支持多轮 messages；流式输出。
 会话隔离：由调用方（如 app.py 的 st.session_state["chat_messages"]）按浏览器会话分别维护列表。
 模型用长期记忆（摘要、画像）：由 Agent 内部按 user_id 检索并注入 context。
 """
-from langchain.agents import create_agent
-from langchain.agents.middleware import SummarizationMiddleware
 from langchain_core.messages import AIMessage
 from langgraph.errors import GraphRecursionError
 
-from agent.mcp_loader import load_remote_mcp_tools_sync
-from agent.tools.agent_tools import *
-from agent.tools.middleware import *
-from model.factory import chat_model, turbo_model
-from raw_agent_skillkit import build_skill_tools
+from agent.react_graph_build import compile_react_agent
 from utils.config_utils import agent_conf, chroma_conf
 from utils.latency_trace import end_turn, note_assistant_stream_done, start_turn
 from utils.log_utils import logger
 from utils.memory_inject import memory_inject_flags
 from utils.memory_utils import trim_conversation_messages, validate_chat_messages
-from utils.prompt_utils import load_system_prompts
-
 from memory.factual_multi import format_factual_block_for_injection
 from memory.memory_queue import enqueue_memory_job
 
@@ -68,35 +60,7 @@ def _inject_memory_context(user_id: str, query: str) -> dict:
 
 class ReactAgent:
     def __init__(self):
-        mcp_tools = load_remote_mcp_tools_sync()
-        self.agent = create_agent(
-            model=chat_model,
-            system_prompt=load_system_prompts(),
-            tools=[
-                rag_summarize,
-                get_weather,
-                get_user_id,
-                get_user_location,
-                get_current_month,
-                fetch_external_data,
-                fill_context_for_report,
-                *build_skill_tools(),
-                *mcp_tools,
-            ],
-            middleware=[
-                monitor_tool,
-                log_before_model,
-                build_system_prompt,
-                log_wrap_model_tokens,
-                after_model,
-                SummarizationMiddleware(
-                    model=turbo_model,
-                    trigger=("messages", 5),
-                    keep=("messages", 2),
-                    summary_prompt="请用简洁中文，客观总结下面的对话内容：\n\n{messages}",
-                ),
-            ],
-        )
+        self.agent = compile_react_agent()
         self._max_messages = int(agent_conf.get("conversation_max_messages", 40))
         self._recursion_limit = int(agent_conf.get("agent_recursion_limit", 40))
 
