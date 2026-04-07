@@ -171,7 +171,7 @@ class ReactAgent:
 
         Yields:
             str: 本轮助手回复的增量文本片段（拼接后与最终回复一致）。
-            若开启 reflection：先发主回答流式增量，结束后再做审核；未达标则继续 yield 修正轮增量。
+            若开启 reflection：先发主回答流式增量，结束后再做审核；未达标时先 yield 一段用户可见提示，再流式输出修正轮。
         """
         # 验证信息
         validate_chat_messages(messages)
@@ -231,7 +231,16 @@ class ReactAgent:
             ]
             trimmed2 = trim_conversation_messages(messages_retry, self._max_messages)
             ctx1 = self._build_context(user_id, original_query)
-            fix_parts: list[str] = []
+
+            user_notice = (
+                "\n\n---\n"
+                "【提示】刚才的回答未通过质量自检，可能存在不准确、不完整或与问题不够贴切之处。"
+                "正在重新生成回复，请稍候。\n\n"
+            )
+            all_emitted.append(user_notice)
+            yield user_notice
+
+            fix_parts: list[str] = [user_notice]
             for delta in self._iter_assistant_stream(trimmed2, ctx1):
                 fix_parts.append(delta)
                 all_emitted.append(delta)
