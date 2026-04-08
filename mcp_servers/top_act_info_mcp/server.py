@@ -57,7 +57,6 @@ def get_top_act_by_id(id: int) -> str:
     url = (os.environ.get("TOP_ACT_API_URL") or "").strip() or _DEFAULT_POST_URL
     payload = json.dumps(id).encode("utf-8")
     _logger.info("get_top_act_by_id 调用 id=%s url=%s", id, url)
-    print(f"[top_act_info_mcp] 调用 get_top_act_by_id(id={id}) POST {url}", flush=True)
     headers: dict[str, str] = {
         "Content-Type": "application/json",
         "Accept": "application/json",
@@ -90,11 +89,6 @@ def get_top_act_by_id(id: int) -> str:
                 len(body),
                 body if len(body) <= 4000 else body[:4000] + "...(truncated)",
             )
-            print(
-                f"[top_act_info_mcp] 结果 id={id} status={status} len={len(body)}\n"
-                f"{body if len(body) <= 2000 else body[:2000] + '...(truncated)'}",
-                flush=True,
-            )
             return body
     except HTTPError as e:
         raw = e.read().decode("utf-8", errors="replace") if e.fp else ""
@@ -103,7 +97,6 @@ def get_top_act_by_id(id: int) -> str:
             ensure_ascii=False,
         )
         _logger.warning("get_top_act_by_id HTTPError id=%s: %s", id, err)
-        print(f"[top_act_info_mcp] HTTPError id={id} {err}", flush=True)
         return err
     except URLError as e:
         err = json.dumps(
@@ -111,7 +104,6 @@ def get_top_act_by_id(id: int) -> str:
             ensure_ascii=False,
         )
         _logger.warning("get_top_act_by_id URLError id=%s: %s", id, err)
-        print(f"[top_act_info_mcp] URLError id={id} {err}", flush=True)
         return err
 
 

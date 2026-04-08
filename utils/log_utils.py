@@ -3,10 +3,10 @@ import logging
 import os
 from datetime import datetime
 
-from utils.path_utils import get_abs_path
+from utils.path_utils import get_repo_root
 
-# 日志保存的根目录（项目根目录下的 logs/，与 utils 平级）
-LOG_ROOT = get_abs_path("../logs")
+# 日志目录：仓库根下 logs/（与 get_repo_root() 对齐，等价于原 get_abs_path("../logs")）
+LOG_ROOT = os.path.join(get_repo_root(), "logs")
 
 # 日志目录
 os.makedirs(LOG_ROOT, exist_ok=True)

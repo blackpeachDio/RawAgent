@@ -18,3 +18,5 @@
 日志目录：项目根目录 `logs/`（见 `utils/log_utils.py`）。
 
 自检：项目根执行 `python scripts/verify_config.py`，确认合并后的配置键存在。
+
+路径：`utils.path_utils.get_repo_root()` 为仓库根；`get_abs_path("../...")` 仍以 `utils/` 为基准，与历史行为一致。
