@@ -12,7 +12,7 @@ agent-transcripts
 chroma_db
 chroma_memory_db
 history
-utils/logs
+logs
 
 # 密钥：镜像内不包含，运行时挂载或复制 api.yml
 config/api.yml

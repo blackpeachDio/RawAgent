@@ -5,8 +5,8 @@ from datetime import datetime
 
 from utils.path_utils import get_abs_path
 
-# 日志保存的根目录
-LOG_ROOT = get_abs_path("logs")
+# 日志保存的根目录（项目根目录下的 logs/，与 utils 平级）
+LOG_ROOT = get_abs_path("../logs")
 
 # 日志目录
 os.makedirs(LOG_ROOT, exist_ok=True)
