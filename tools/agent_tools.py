@@ -1,5 +1,5 @@
 """
-内建 LangChain 工具定义；对外推荐 ``from tools import rag_summarize, ...``（见根包 ``tools``）。
+内建 LangChain 工具定义；对外 ``from tools import rag_summarize, ...``。
 """
 import os
 import random

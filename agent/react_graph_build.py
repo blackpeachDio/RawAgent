@@ -18,7 +18,7 @@ from tools import (
     get_weather,
     rag_summarize,
 )
-from agent.tools.middleware import (
+from tools.middleware import (
     after_model,
     build_system_prompt,
     log_before_model,

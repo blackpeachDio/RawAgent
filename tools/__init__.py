@@ -1,9 +1,9 @@
 """
-内建 Agent 工具的稳定入口：实现位于 ``agent.tools.agent_tools``，此处 re-export 便于统一 import。
+内建 Agent 工具：实现位于 ``tools.agent_tools``、``tools.middleware``。
 
-业务侧可逐步改为 ``from tools import rag_summarize, ...`` 与 ``agent.tools`` 等价。
+用法：``from tools import rag_summarize, ...`` 或 ``from tools.middleware import ...``。
 """
-from agent.tools.agent_tools import (
+from .agent_tools import (
     fetch_external_data,
     fill_context_for_report,
     get_current_month,

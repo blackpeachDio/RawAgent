@@ -1,4 +1,4 @@
-"""供 create_agent 注册的技能工具（依赖 loader，与 agent_tools 隔离）。"""
+"""供 create_agent 注册的技能工具（依赖 loader，与 ``tools.agent_tools`` 内建工具隔离）。"""
 from __future__ import annotations
 
 import json
