@@ -1,30 +1,35 @@
 """
-yaml
-k: v
+配置加载：路径基于仓库根 ``config/``（``get_repo_root()``），与原先 ``get_abs_path("../config/...")`` 等价。
 """
+from __future__ import annotations
+
 import json
 import os
 
 import yaml
 
-from utils.path_utils import get_abs_path
+from utils.path_utils import get_repo_root
 
 
-def load_rag_config(config_path: str = get_abs_path("../config/rag.yml"), encoding: str = "utf-8"):
-    with open(config_path, "r", encoding=encoding) as f:
+def get_config_path(filename: str) -> str:
+    """仓库根下 ``config/<filename>`` 的绝对路径（供加载函数与评测脚本等复用）。"""
+    return os.path.join(get_repo_root(), "config", filename)
+
+
+def load_rag_config(config_path: str | None = None, encoding: str = "utf-8"):
+    path = config_path or get_config_path("rag.yml")
+    with open(path, "r", encoding=encoding) as f:
         return yaml.load(f, Loader=yaml.FullLoader)
 
 
-def load_chroma_config(
-    config_path: str = get_abs_path("../config/chroma.yml"),
-    encoding: str = "utf-8",
-):
+def load_chroma_config(config_path: str | None = None, encoding: str = "utf-8"):
     """加载 chroma.yml，并与 chroma_memory.yml 合并为同一 dict（键名不变，仍为 chroma_conf）。"""
-    with open(config_path, "r", encoding=encoding) as f:
+    path = config_path or get_config_path("chroma.yml")
+    with open(path, "r", encoding=encoding) as f:
         data = yaml.load(f, Loader=yaml.FullLoader) or {}
     if not isinstance(data, dict):
         data = {}
-    mem_path = get_abs_path("../config/chroma_memory.yml")
+    mem_path = get_config_path("chroma_memory.yml")
     if os.path.isfile(mem_path):
         with open(mem_path, "r", encoding=encoding) as f:
             mem = yaml.load(f, Loader=yaml.FullLoader) or {}
@@ -33,21 +38,20 @@ def load_chroma_config(
     return data
 
 
-def load_prompts_config(config_path: str = get_abs_path("../config/prompts.yml"), encoding: str = "utf-8"):
-    with open(config_path, "r", encoding=encoding) as f:
+def load_prompts_config(config_path: str | None = None, encoding: str = "utf-8"):
+    path = config_path or get_config_path("prompts.yml")
+    with open(path, "r", encoding=encoding) as f:
         return yaml.load(f, Loader=yaml.FullLoader)
 
 
-def load_agent_config(
-    config_path: str = get_abs_path("../config/agent.yml"),
-    encoding: str = "utf-8",
-):
+def load_agent_config(config_path: str | None = None, encoding: str = "utf-8"):
     """加载 agent.yml，并与 memory.yml 合并为同一 dict（后者键覆盖前者，便于拆分文件而保持 agent_conf 接口不变）。"""
-    with open(config_path, "r", encoding=encoding) as f:
+    path = config_path or get_config_path("agent.yml")
+    with open(path, "r", encoding=encoding) as f:
         data = yaml.load(f, Loader=yaml.FullLoader) or {}
     if not isinstance(data, dict):
         data = {}
-    memory_path = get_abs_path("../config/memory.yml")
+    memory_path = get_config_path("memory.yml")
     if os.path.isfile(memory_path):
         with open(memory_path, "r", encoding=encoding) as f:
             mem = yaml.load(f, Loader=yaml.FullLoader) or {}
@@ -56,28 +60,31 @@ def load_agent_config(
     return data
 
 
-def load_skills_config(config_path: str = get_abs_path("../config/skills.yml"), encoding: str = "utf-8"):
+def load_skills_config(config_path: str | None = None, encoding: str = "utf-8"):
     """RawAgent 运行时技能（raw_agent_skills/）；文件不存在则关闭。"""
-    if not os.path.isfile(config_path):
+    path = config_path or get_config_path("skills.yml")
+    if not os.path.isfile(path):
         return {"enabled": False, "root": "raw_agent_skills", "max_body_chars": 12000}
-    with open(config_path, "r", encoding=encoding) as f:
+    with open(path, "r", encoding=encoding) as f:
         data = yaml.load(f, Loader=yaml.FullLoader)
         return data if isinstance(data, dict) else {}
 
 
-def load_mcp_config(config_path: str = get_abs_path("../config/mcp.json"), encoding: str = "utf-8"):
+def load_mcp_config(config_path: str | None = None, encoding: str = "utf-8"):
     """Cursor 风格 MCP：见 config/mcp.json（mcpServers + transportType）。"""
-    if not os.path.isfile(config_path):
+    path = config_path or get_config_path("mcp.json")
+    if not os.path.isfile(path):
         return {}
-    with open(config_path, "r", encoding=encoding) as f:
+    with open(path, "r", encoding=encoding) as f:
         return json.load(f)
 
 
-def load_api_config(config_path: str = get_abs_path("../config/api.yml"), encoding: str = "utf-8"):
+def load_api_config(config_path: str | None = None, encoding: str = "utf-8"):
     """支持 config/api.yml；Docker/CI 可仅用环境变量 DASHSCOPE_API_KEY（会覆盖文件中的值）。"""
+    path = config_path or get_config_path("api.yml")
     data: dict = {}
-    if os.path.isfile(config_path):
-        with open(config_path, "r", encoding=encoding) as f:
+    if os.path.isfile(path):
+        with open(path, "r", encoding=encoding) as f:
             data = yaml.load(f, Loader=yaml.FullLoader) or {}
     env_key = (os.environ.get("DASHSCOPE_API_KEY") or "").strip()
     if env_key:

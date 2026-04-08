@@ -19,4 +19,4 @@
 
 自检：项目根执行 `python scripts/verify_config.py`，确认合并后的配置键存在。
 
-路径：`utils.path_utils.get_repo_root()` 为仓库根；`get_abs_path("../...")` 仍以 `utils/` 为基准，与历史行为一致。
+路径：`utils.path_utils.get_repo_root()` 为仓库根；`get_abs_path("../...")` 仍以 `utils/` 为基准，与历史行为一致。配置文件默认路径由 `utils.config_utils.get_config_path("xxx.yml")` 给出（等价于 `config/xxx.yml`）。

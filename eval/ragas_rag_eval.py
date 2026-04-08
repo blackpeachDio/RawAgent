@@ -80,10 +80,12 @@ if str(_ROOT) not in sys.path:
 
 
 def _load_eval_config() -> dict[str, Any]:
+    import os
     import yaml
-    from utils.path_utils import get_abs_path
 
-    p = get_abs_path("../config/eval_rag.yml")
+    from utils.path_utils import get_repo_root
+
+    p = os.path.join(get_repo_root(), "config", "eval_rag.yml")
     with open(p, "r", encoding="utf-8") as f:
         return yaml.load(f, Loader=yaml.FullLoader)
 
