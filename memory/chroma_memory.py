@@ -21,7 +21,7 @@ from langchain_core.documents import Document
 from model.factory import embedding_model
 from utils.config_utils import chroma_conf
 from utils.log_utils import logger
-from utils.path_utils import get_abs_path
+from utils.path_utils import resolve_repo_path
 
 
 def _content_sha256(text: str) -> str:
@@ -82,7 +82,7 @@ def _finalize_memory_documents(
 
 
 def _memory_persist_dir() -> str:
-    return get_abs_path(chroma_conf.get("memory_persist_directory", "../chroma_memory_db"))
+    return resolve_repo_path(chroma_conf.get("memory_persist_directory", "../chroma_memory_db"))
 
 
 def _memory_collection() -> str:

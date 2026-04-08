@@ -7,14 +7,14 @@ from pathlib import Path
 import yaml
 
 from utils.config_utils import skills_conf
-from utils.path_utils import get_abs_path
+from utils.path_utils import resolve_repo_path
 
 
 def skills_root_abs() -> str:
     rel = (skills_conf.get("root") or "raw_agent_skills").strip()
     if os.path.isabs(rel):
         return rel
-    return get_abs_path(os.path.join("..", rel))
+    return resolve_repo_path(os.path.join("..", rel))
 
 
 def _parse_skill_md(text: str) -> tuple[dict, str]:

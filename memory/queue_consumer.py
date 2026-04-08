@@ -16,12 +16,12 @@ from pathlib import Path
 
 from utils.config_utils import agent_conf
 from utils.log_utils import logger
-from utils.path_utils import get_abs_path
+from utils.path_utils import resolve_repo_path
 
 
 def _pending_dir() -> Path:
     rel = (agent_conf.get("memory_queue_dir") or "../data/memory_queue").strip()
-    return Path(get_abs_path(rel)) / "pending"
+    return Path(resolve_repo_path(rel)) / "pending"
 
 
 def _process_one(path: Path) -> None:

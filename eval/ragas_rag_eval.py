@@ -67,33 +67,32 @@ context_recall（上下文召回率）
 from __future__ import annotations
 
 import json
+import os
 import sys
-from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
 # 项目根：保证可 python -m eval.ragas_rag_eval
 # ---------------------------------------------------------------------------
-_ROOT = Path(__file__).resolve().parents[1]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+_REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _REPO not in sys.path:
+    sys.path.insert(0, _REPO)
 
 
 def _load_eval_config() -> dict[str, Any]:
-    import os
     import yaml
 
-    from utils.path_utils import get_repo_root
+    from utils.path_utils import get_config_path
 
-    p = os.path.join(get_repo_root(), "config", "eval_rag.yml")
+    p = get_config_path("eval_rag.yml")
     with open(p, "r", encoding="utf-8") as f:
         return yaml.load(f, Loader=yaml.FullLoader)
 
 
 def _load_gold(path: str) -> list[dict[str, str]]:
-    from utils.path_utils import get_abs_path
+    from utils.path_utils import resolve_repo_path
 
-    fp = get_abs_path(path)
+    fp = resolve_repo_path(path)
     with open(fp, "r", encoding="utf-8") as f:
         data = json.load(f)
     if not isinstance(data, list):

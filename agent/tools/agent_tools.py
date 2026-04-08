@@ -9,7 +9,7 @@ from langchain_core.tools import tool
 from rag.online_query import RagSummarizeService
 from utils.config_utils import agent_conf
 from utils.log_utils import logger
-from utils.path_utils import get_abs_path
+from utils.path_utils import resolve_repo_path
 from .impl.tool_get_weather import get_weather_impl
 
 rag = RagSummarizeService()
@@ -72,7 +72,7 @@ def generate_external_data():
     :return:
     """
     if not external_data:
-        external_data_path = get_abs_path(agent_conf["external_data_path"])
+        external_data_path = resolve_repo_path(agent_conf["external_data_path"])
 
         if not os.path.exists(external_data_path):
             raise FileNotFoundError(f"外部数据文件{external_data_path}不存在")

@@ -12,9 +12,20 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from utils.config_utils import agent_conf, chroma_conf  # noqa: E402
+from utils.path_utils import get_config_path, get_repo_root, resolve_repo_path  # noqa: E402
 
 
 def main() -> int:
+    # 路径解析与 get_config_path / 仓库根一致
+    agent_yml = get_config_path("agent.yml")
+    if os.path.normpath(resolve_repo_path("../config/agent.yml")) != os.path.normpath(agent_yml):
+        print("[FAIL] resolve_repo_path(../config/agent.yml) != get_config_path(agent.yml)", file=sys.stderr)
+        return 1
+    hist = os.path.join(get_repo_root(), "history")
+    if os.path.normpath(resolve_repo_path("../history")) != os.path.normpath(hist):
+        print("[FAIL] resolve_repo_path(../history) 与仓库根/history 不一致", file=sys.stderr)
+        return 1
+
     checks = [
         (agent_conf, "memory_inject_mode", "agent+memory 合并"),
         (agent_conf, "conversation_max_messages", "agent.yml"),

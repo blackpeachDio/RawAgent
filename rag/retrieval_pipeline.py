@@ -185,7 +185,7 @@ _cross_encoder_cache: tuple[str, Any] | None = None
 def get_cached_cross_encoder():
     """同一进程内复用 CrossEncoder，避免每次检索重复加载模型。"""
     global _cross_encoder_cache
-    from utils.path_utils import get_abs_path
+    from utils.path_utils import resolve_repo_path
 
     _apply_hf_hub_endpoint()
     from langchain_community.cross_encoders import HuggingFaceCrossEncoder
@@ -196,7 +196,7 @@ def get_cached_cross_encoder():
     elif os.path.isdir(model_raw):
         model_name = model_raw
     else:
-        cand = get_abs_path(model_raw)
+        cand = resolve_repo_path(model_raw)
         model_name = cand if os.path.isdir(cand) else model_raw
 
     # 设备选择

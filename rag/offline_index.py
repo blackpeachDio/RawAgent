@@ -16,7 +16,7 @@ from rag.parent_store import ParentContentStore
 from utils.config_utils import chroma_conf
 from utils.file_utils import txt_loader, pdf_loader, get_file_md5_hex, listdir_with_allowed_type
 from utils.log_utils import logger
-from utils.path_utils import get_abs_path
+from utils.path_utils import resolve_repo_path
 
 
 def _split_parent_child(
@@ -64,7 +64,7 @@ class OfflineIndexService:
     """仅负责构建 / 增量更新向量索引，不在线回答。"""
 
     def __init__(self):
-        persist_dir = get_abs_path(chroma_conf["persist_directory"])
+        persist_dir = resolve_repo_path(chroma_conf["persist_directory"])
         logger.info("[离线索引] Chroma persist_directory=%s", persist_dir)
         self.vector_store = Chroma(
             collection_name=chroma_conf["collection_name"],
@@ -86,7 +86,7 @@ class OfflineIndexService:
                 raise ValueError(
                     "parent_child_enabled=true 时必须配置 parent_child_map_path（父块映射表 SQLite 路径）"
                 )
-            self._parent_store = ParentContentStore(get_abs_path(map_path))
+            self._parent_store = ParentContentStore(resolve_repo_path(map_path))
             self._parent_splitter = RecursiveCharacterTextSplitter(
                 chunk_size=int(chroma_conf.get("parent_chunk_size", 1200)),
                 chunk_overlap=int(chroma_conf.get("parent_chunk_overlap", 100)),
@@ -99,7 +99,7 @@ class OfflineIndexService:
                 chroma_conf.get("parent_chunk_overlap"),
                 chroma_conf.get("chunk_size"),
                 chroma_conf.get("chunk_overlap"),
-                get_abs_path(map_path),
+                resolve_repo_path(map_path),
             )
 
     def load_document(self):
@@ -110,11 +110,11 @@ class OfflineIndexService:
         """
 
         def check_md5_hex(md5_for_check: str):
-            if not os.path.exists(get_abs_path(chroma_conf["md5_hex_store"])):
-                open(get_abs_path(chroma_conf["md5_hex_store"]), "w", encoding="utf-8").close()
+            if not os.path.exists(resolve_repo_path(chroma_conf["md5_hex_store"])):
+                open(resolve_repo_path(chroma_conf["md5_hex_store"]), "w", encoding="utf-8").close()
                 return False
 
-            with open(get_abs_path(chroma_conf["md5_hex_store"]), "r", encoding="utf-8") as f:
+            with open(resolve_repo_path(chroma_conf["md5_hex_store"]), "r", encoding="utf-8") as f:
                 for line in f.readlines():
                     line = line.strip()
                     if line == md5_for_check:
@@ -123,7 +123,7 @@ class OfflineIndexService:
                 return False
 
         def save_md5_hex(md5_for_check: str):
-            with open(get_abs_path(chroma_conf["md5_hex_store"]), "a", encoding="utf-8") as f:
+            with open(resolve_repo_path(chroma_conf["md5_hex_store"]), "a", encoding="utf-8") as f:
                 f.write(md5_for_check + "\n")
 
         def get_file_documents(read_path: str):
@@ -136,7 +136,7 @@ class OfflineIndexService:
             return []
 
         allowed_files_path: list[str] = listdir_with_allowed_type(
-            get_abs_path(chroma_conf["data_path"]),
+            resolve_repo_path(chroma_conf["data_path"]),
             tuple(chroma_conf["allow_knowledge_file_type"]),
         )
 

@@ -16,7 +16,7 @@ from typing import Any
 
 from utils.config_utils import agent_conf
 from utils.log_utils import logger
-from utils.path_utils import get_abs_path
+from utils.path_utils import resolve_repo_path
 
 _q: queue.Queue[dict[str, Any]] | None = None
 _worker_lock = threading.Lock()
@@ -25,7 +25,7 @@ _worker_started = False
 
 def _pending_dir() -> Path:
     rel = (agent_conf.get("memory_queue_dir") or "../data/memory_queue").strip()
-    return Path(get_abs_path(rel)) / "pending"
+    return Path(resolve_repo_path(rel)) / "pending"
 
 
 def enqueue_memory_job(user_id: str, user_msg: str, assistant_msg: str) -> None:

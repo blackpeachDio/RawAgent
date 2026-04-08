@@ -34,13 +34,14 @@ import sys
 from dataclasses import dataclass
 
 # 保证从项目根目录运行时可导入
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
+_REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _REPO not in sys.path:
+    sys.path.insert(0, _REPO)
 
 from agent.react_agent import ReactAgent
 from eval.judge.llm_judge import llm_answer_score
 from model.factory import chat_model
+from utils.path_utils import get_repo_root
 
 
 @dataclass
@@ -79,7 +80,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--golden",
-        default=os.path.join(os.path.dirname(__file__), "golden_agent.json"),
+        default=os.path.join(get_repo_root(), "eval", "judge", "golden_agent.json"),
         help="金标 JSON 路径（需含 ground_truth_answer）",
     )
     args = parser.parse_args()

@@ -1,5 +1,7 @@
 """
 配置加载：路径基于仓库根 ``config/``（``get_repo_root()``），与原先 ``get_abs_path("../config/...")`` 等价。
+
+``get_config_path`` 定义在 ``utils.path_utils``，此处再导出以兼容 ``from utils.config_utils import get_config_path``。
 """
 from __future__ import annotations
 
@@ -8,12 +10,7 @@ import os
 
 import yaml
 
-from utils.path_utils import get_repo_root
-
-
-def get_config_path(filename: str) -> str:
-    """仓库根下 ``config/<filename>`` 的绝对路径（供加载函数与评测脚本等复用）。"""
-    return os.path.join(get_repo_root(), "config", filename)
+from utils.path_utils import get_config_path
 
 
 def load_rag_config(config_path: str | None = None, encoding: str = "utf-8"):

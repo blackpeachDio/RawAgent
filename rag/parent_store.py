@@ -7,7 +7,7 @@ from pathlib import Path
 
 from utils.config_utils import chroma_conf
 from utils.log_utils import logger
-from utils.path_utils import get_abs_path
+from utils.path_utils import resolve_repo_path
 
 _lock = threading.Lock()
 _store = None  # ParentContentStore | None
@@ -75,7 +75,7 @@ def get_parent_store() -> ParentContentStore | None:
         return None
     with _lock:
         if _store is None:
-            path = get_abs_path(str(raw).strip())
+            path = resolve_repo_path(str(raw).strip())
             _store = ParentContentStore(path)
             logger.info("[RAG] 父子映射表 path=%s", path)
         return _store

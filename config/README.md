@@ -17,6 +17,15 @@
 
 日志目录：项目根目录 `logs/`（见 `utils/log_utils.py`）。
 
-自检：项目根执行 `python scripts/verify_config.py`，确认合并后的配置键存在。
+自检：
 
-路径：`utils.path_utils.get_repo_root()` 为仓库根；`get_abs_path("../...")` 仍以 `utils/` 为基准，与历史行为一致。配置文件默认路径由 `utils.config_utils.get_config_path("xxx.yml")` 给出（等价于 `config/xxx.yml`）。
+- `python scripts/verify_paths.py`：仅校验路径辅助函数（不加载完整配置、不读 API 密钥）。
+- `python scripts/verify_config.py`：确认合并后的配置键存在（会加载 `config_utils`）。
+
+路径：
+
+- `utils.path_utils.get_repo_root()`：仓库根。
+- `utils.path_utils.get_config_path("xxx.yml")`：`config/` 下文件的绝对路径（不读文件）；`config_utils` 仍再导出该名以兼容旧 import。
+- `resolve_repo_path("../...")`：**配置项中的相对路径**（如 `../chroma_db`、`../data/...`）推荐用此解析为**仓库根**下的绝对路径；与旧 `get_abs_path` 对 `../` 的语义一致。
+- `get_abs_path("../...")`：与 `resolve_repo_path` 相同；非 `../` 前缀时仍为相对 `utils/`（历史兼容，新代码避免依赖）。
+- `utils/prompt_utils.py` 中提示词文件路径已统一为 **`resolve_repo_path`**（与 `prompts.yml` 中 `../prompts/...` 一致）。

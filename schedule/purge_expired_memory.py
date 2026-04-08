@@ -11,20 +11,20 @@ memory_ttl_days 为 0 时跳过删除（退出码 0）。
 """
 from __future__ import annotations
 
+import os
 import sys
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 # 项目根目录加入 path，便于 `python -m schedule.purge_expired_memory`
-_ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+_REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _REPO not in sys.path:
+    sys.path.insert(0, _REPO)
 
 import chromadb  # noqa: E402
 
 from utils.config_utils import chroma_conf  # noqa: E402
 from utils.log_utils import logger  # noqa: E402
-from utils.path_utils import get_abs_path  # noqa: E402
+from utils.path_utils import resolve_repo_path  # noqa: E402
 
 
 def _parse_created_at_utc(raw: str | None) -> datetime | None:
@@ -64,7 +64,7 @@ def purge_expired_memory_vectors(*, batch_size: int = 500) -> int:
         )
         return 0
 
-    persist = get_abs_path(chroma_conf.get("memory_persist_directory", "../chroma_memory_db"))
+    persist = resolve_repo_path(chroma_conf.get("memory_persist_directory", "../chroma_memory_db"))
     name = chroma_conf.get("memory_collection_name", "user_memory")
 
     client = chromadb.PersistentClient(path=persist)

@@ -20,14 +20,14 @@ from rag.retrieval_pipeline import (
 from utils.config_utils import chroma_conf
 from utils.latency_trace import note_rag_generate, trace_id_or_dash
 from utils.log_utils import logger
-from utils.path_utils import get_abs_path
+from utils.path_utils import resolve_repo_path
 from utils.prompt_utils import load_rag_prompts
 from utils.prompt_log_utils import get_prompt_log_config, maybe_truncate, log_truncated_block
 
 
 def _chroma_persist_directory() -> str:
-    """与 cwd 无关，固定解析到项目内 chroma 目录（配置里 persist_directory 相对 utils）。"""
-    return get_abs_path(chroma_conf["persist_directory"])
+    """与 cwd 无关，固定解析到仓库根下 chroma 目录（配置 persist_directory，如 ../chroma_db）。"""
+    return resolve_repo_path(chroma_conf["persist_directory"])
 
 
 class OnlineQueryService:

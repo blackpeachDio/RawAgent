@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any
 
-from utils.path_utils import get_abs_path
+from utils.path_utils import resolve_repo_path
 
 
 class HistoryStore(ABC):
@@ -43,7 +43,7 @@ class FileHistoryStore(HistoryStore):
     """本地文件实现：history/{user_id}.json，每用户一个 JSON 数组。"""
 
     def __init__(self, base_dir: str | None = None):
-        self._base_dir = get_abs_path(base_dir or "../history")
+        self._base_dir = resolve_repo_path(base_dir or "../history")
         os.makedirs(self._base_dir, exist_ok=True)
 
     def _path(self, user_id: str) -> str:
