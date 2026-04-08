@@ -92,15 +92,15 @@ def log_before_model(
 ):         # 在模型执行前输出日志
     note_before_model()
     logger.info(f"[log_before_model]即将调用模型，带有{len(state['messages'])}条消息。")
-    print("before_model:", state)
+    logger.debug("[before_model] messages_count=%d", len(state["messages"]))
     return None
 
 @after_model
 def after_model(
         state: AgentState,          # 整个Agent智能体中的状态记录
         runtime: Runtime,           # 记录了整个执行过程中的上下文信息
-):         # 在模型执行前输出日志
-    print("after_model:", state)
+):         # 模型调用之后（调试用，默认不刷屏）
+    logger.debug("[after_model] messages_count=%d", len(state["messages"]))
     return None
 
 @wrap_model_call

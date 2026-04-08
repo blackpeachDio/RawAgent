@@ -8,7 +8,8 @@
 | `agent.yml` | Agent 运行时：对话条数、recursion、reflection、外部 CSV 路径等 |
 | `memory.yml` | 长期记忆注入/抽取、事实存储、队列、多值画像等；与 `agent.yml` **合并**为 `agent_conf` |
 | `rag.yml` | 聊天/嵌入模型名、温度、轻量 turbo 模型名 |
-| `chroma.yml` | RAG 向量库、混合检索、rerank、改写、**以及**用户向量记忆库路径等 |
+| `chroma.yml` | RAG 向量库、混合检索、rerank、改写、离线索引等 |
+| `chroma_memory.yml` | 用户长期记忆向量库（合并入 `chroma_conf`，与 `chroma.yml` 键不冲突） |
 | `prompts.yml` | 各类提示词文件路径 |
 | `skills.yml` | `raw_agent_skillkit` 技能开关与根目录 |
 | `mcp.json` | MCP 服务器列表 |

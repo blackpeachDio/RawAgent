@@ -15,9 +15,22 @@ def load_rag_config(config_path: str = get_abs_path("../config/rag.yml"), encodi
         return yaml.load(f, Loader=yaml.FullLoader)
 
 
-def load_chroma_config(config_path: str = get_abs_path("../config/chroma.yml"), encoding: str = "utf-8"):
+def load_chroma_config(
+    config_path: str = get_abs_path("../config/chroma.yml"),
+    encoding: str = "utf-8",
+):
+    """加载 chroma.yml，并与 chroma_memory.yml 合并为同一 dict（键名不变，仍为 chroma_conf）。"""
     with open(config_path, "r", encoding=encoding) as f:
-        return yaml.load(f, Loader=yaml.FullLoader)
+        data = yaml.load(f, Loader=yaml.FullLoader) or {}
+    if not isinstance(data, dict):
+        data = {}
+    mem_path = get_abs_path("../config/chroma_memory.yml")
+    if os.path.isfile(mem_path):
+        with open(mem_path, "r", encoding=encoding) as f:
+            mem = yaml.load(f, Loader=yaml.FullLoader) or {}
+        if isinstance(mem, dict):
+            data.update(mem)
+    return data
 
 
 def load_prompts_config(config_path: str = get_abs_path("../config/prompts.yml"), encoding: str = "utf-8"):
