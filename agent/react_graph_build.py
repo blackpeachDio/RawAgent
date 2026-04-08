@@ -9,7 +9,7 @@ from langchain.agents.middleware import SummarizationMiddleware
 from typing import TYPE_CHECKING
 
 from agent.mcp_loader import load_remote_mcp_tools_sync
-from agent.tools.agent_tools import (
+from tools import (
     fetch_external_data,
     fill_context_for_report,
     get_current_month,

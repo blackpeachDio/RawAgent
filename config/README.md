@@ -16,3 +16,5 @@
 | `eval_rag.yml` | 离线 RAG 评测（可选） |
 
 日志目录：项目根目录 `logs/`（见 `utils/log_utils.py`）。
+
+自检：项目根执行 `python scripts/verify_config.py`，确认合并后的配置键存在。

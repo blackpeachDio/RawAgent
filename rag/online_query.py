@@ -30,13 +30,6 @@ def _chroma_persist_directory() -> str:
     return get_abs_path(chroma_conf["persist_directory"])
 
 
-def print_prompt(prompt):
-    print("=" * 20)
-    print(prompt.to_string())
-    print("=" * 20)
-    return prompt
-
-
 class OnlineQueryService:
     """只读访问持久化向量库，提供检索器（统一走 retrieval_pipeline）。"""
 
