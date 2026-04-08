@@ -26,8 +26,9 @@ from langgraph.errors import GraphRecursionError
 
 from agent.react_graph_build import compile_react_agent
 from agent.react_agent import _inject_memory_context
+from rag.warmup import maybe_preload_rerank_cross_encoder
 from memory.memory_queue import enqueue_memory_job
-from utils.config_utils import agent_conf, chroma_conf
+from utils.config_utils import agent_conf
 from utils.latency_trace import end_turn, note_assistant_stream_done, start_turn
 from utils.log_utils import logger
 from utils.memory_utils import validate_chat_messages
@@ -54,15 +55,7 @@ class CheckpointReactAgent:
         self._max_messages = int(agent_conf.get("conversation_max_messages", 40))
         self._recursion_limit = int(agent_conf.get("agent_recursion_limit", 40))
 
-        if bool(chroma_conf.get("rerank_preload_on_startup", True)) and bool(
-            chroma_conf.get("rerank_enabled", False)
-        ):
-            try:
-                from rag.retrieval_pipeline import preload_rerank_cross_encoder
-
-                preload_rerank_cross_encoder()
-            except Exception as e:
-                logger.warning("[RAG] CrossEncoder 预加载未执行: %s", e)
+        maybe_preload_rerank_cross_encoder()
 
     @staticmethod
     def _build_context(user_id: str | None, memory_query_for_inject: str) -> dict:

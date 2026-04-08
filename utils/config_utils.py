@@ -25,9 +25,22 @@ def load_prompts_config(config_path: str = get_abs_path("../config/prompts.yml")
         return yaml.load(f, Loader=yaml.FullLoader)
 
 
-def load_agent_config(config_path: str = get_abs_path("../config/agent.yml"), encoding: str = "utf-8"):
+def load_agent_config(
+    config_path: str = get_abs_path("../config/agent.yml"),
+    encoding: str = "utf-8",
+):
+    """加载 agent.yml，并与 memory.yml 合并为同一 dict（后者键覆盖前者，便于拆分文件而保持 agent_conf 接口不变）。"""
     with open(config_path, "r", encoding=encoding) as f:
-        return yaml.load(f, Loader=yaml.FullLoader)
+        data = yaml.load(f, Loader=yaml.FullLoader) or {}
+    if not isinstance(data, dict):
+        data = {}
+    memory_path = get_abs_path("../config/memory.yml")
+    if os.path.isfile(memory_path):
+        with open(memory_path, "r", encoding=encoding) as f:
+            mem = yaml.load(f, Loader=yaml.FullLoader) or {}
+        if isinstance(mem, dict):
+            data.update(mem)
+    return data
 
 
 def load_skills_config(config_path: str = get_abs_path("../config/skills.yml"), encoding: str = "utf-8"):

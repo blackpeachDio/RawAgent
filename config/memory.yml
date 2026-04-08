@@ -1,0 +1,46 @@
+# 长期记忆、事实存储与抽取（由 utils.config_utils 与 agent.yml 合并为 agent_conf，键名不变）
+# 长期记忆注入：always=每轮都带事实+向量；never=不带；auto=按需注入（见 memory_inject_auto_strategy）
+memory_inject_mode: always
+
+# memory_inject_mode=auto 时：llm=轻量模型意图分类（默认）；keywords=子串匹配（旧逻辑，LLM 失败时也会回退）
+memory_inject_auto_strategy: llm
+# auto+llm：DashScope 模型名；不配则用 rag.yml turbo_chat_model_name
+# memory_inject_classifier_model: qwen-turbo
+
+# auto+keywords 或 LLM 回退：子串匹配。不配则代码内默认词表。
+# memory_inject_factual_keywords: ["偏好", "画像"]
+# memory_inject_vector_keywords: ["上次", "记得"]
+
+# 注入 LLM 时，向量记忆（Chroma）最多注入几条正文（检索后经时间排序与去重）
+memory_inject_vector_k: 3
+
+# 记忆提取（extract_store）：带入最近 N 轮「用户+助手」成对对话（含本轮）；至少 1
+memory_extract_max_rounds: 3
+# 提取上下文最大字符数（从最早轮开始丢弃以满足预算）
+memory_extract_max_context_chars: 12000
+
+# 记忆抽取前：用轻量 LLM 判断本轮是否值得抽取（任务队列消费 extract_and_store 时执行）；false 则不调抽取主模型、不写入
+memory_extract_llm_gate_enabled: true
+# 门控模型；不配则用 rag.yml turbo_chat_model_name
+# memory_extract_gate_model: qwen-turbo
+memory_extract_gate_max_tokens: 256
+# 门控时截断本轮用户/助手正文长度（控制成本）
+memory_extract_gate_max_user_chars: 8000
+memory_extract_gate_max_assistant_chars: 12000
+
+# 事实性记忆存储（热插拔）：memory=内存，redis=Redis（后期）
+factual_store_type: memory
+
+# 记忆抽取任务队列：thread=进程内内存队列+守护线程；file=仅写 JSON 到目录，由 ``python -m memory.queue_consumer`` 消费
+memory_queue_mode: thread
+memory_queue_dir: ../data/memory_queue
+
+# hobby/character/preferences：每条 key 下最多保留多少条观察（JSON 数组，按时间合并去重）
+factual_multi_max_per_key: 24
+# 注入主模型时，每个多值 key 最多展示几条（按「日期衰减 + 与当前问句相关度」加权排序后取 top）
+factual_multi_inject_top_n: 8
+# 加权：相关度（与当前 query 文本重叠）与日期新鲜度的权重，二者之和会自动归一化
+factual_multi_weight_recency: 0.35
+factual_multi_weight_relevance: 0.65
+# 日期半衰期（天）：越大则旧记忆在排序中衰减越慢
+factual_multi_recency_half_life_days: 30
