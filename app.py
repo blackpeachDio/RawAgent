@@ -90,7 +90,11 @@ if prompt:
 
         st.chat_message("assistant").write_stream(stream_chars())
 
-    assistant_text = "".join(full_parts)
+    agent_inst = st.session_state["agent"]
+    assistant_text = (
+        (getattr(agent_inst, "last_turn_display_assistant_text", "") or "").strip()
+        or "".join(full_parts)
+    )
     st.session_state["chat_messages"].append(
         {"role": "assistant", "content": assistant_text}
     )

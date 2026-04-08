@@ -28,6 +28,10 @@ from agent.react_graph_build import compile_react_agent
 from agent.react_agent import _inject_memory_context
 from rag.warmup import maybe_preload_rerank_cross_encoder
 from memory.memory_queue import enqueue_memory_job
+from utils.agent_stream_display import (
+    assistant_final_display_text,
+    assistant_stream_visible_text,
+)
 from utils.config_utils import agent_conf
 from utils.latency_trace import end_turn, note_assistant_stream_done, start_turn
 from utils.log_utils import logger
@@ -78,6 +82,7 @@ class CheckpointReactAgent:
             "recursion_limit": self._recursion_limit,
         }
         prev_assistant_text = ""
+        last_ai: AIMessage | None = None
         try:
             stream_iter = self.agent.stream(
                 input_dict,
@@ -92,7 +97,8 @@ class CheckpointReactAgent:
                 latest = raw_msgs[-1]
                 if not isinstance(latest, AIMessage):
                     continue
-                text = (latest.content or "").strip()
+                last_ai = latest
+                text = assistant_stream_visible_text(latest).strip()
                 if not text:
                     continue
                 if len(text) > len(prev_assistant_text) and text.startswith(prev_assistant_text):
@@ -112,6 +118,10 @@ class CheckpointReactAgent:
             yield (
                 "\n\n[提示] 本轮智能体推理步数已达上限，已停止。"
                 "若问题较复杂，可拆成更短的问题分步提问，或在配置中适当调大 agent_recursion_limit。"
+            )
+        finally:
+            self._last_turn_final_assistant_text = (
+                assistant_final_display_text(last_ai) if last_ai else ""
             )
 
     def execute_stream(
@@ -138,6 +148,10 @@ class CheckpointReactAgent:
 
         start_turn(original_query)
         all_emitted: list[str] = []
+        self.last_turn_display_assistant_text = ""
+        main_final_text = ""
+        fix_final_text = ""
+        user_notice_text = ""
         try:
             ctx0 = self._build_context(user_id, original_query)
             user_human = HumanMessage(content=original_query)
@@ -147,12 +161,18 @@ class CheckpointReactAgent:
                 draft_parts.append(delta)
                 all_emitted.append(delta)
                 yield delta
-            draft = "".join(draft_parts)
+            main_final_text = (
+                (getattr(self, "_last_turn_final_assistant_text", None) or "").strip()
+                or "".join(draft_parts).strip()
+            )
+            draft = main_final_text
             note_assistant_stream_done("main", len(draft))
 
             if not bool(agent_conf.get("reflection_enabled", False)):
+                self.last_turn_display_assistant_text = main_final_text
                 return
             if not draft.strip():
+                self.last_turn_display_assistant_text = main_final_text
                 return
 
             from agent.reflect_critique import reflect_critique_score
@@ -167,6 +187,7 @@ class CheckpointReactAgent:
                 (reason[:160] + "…") if len(reason) > 160 else reason,
             )
             if score >= min_score or extra_turns <= 0:
+                self.last_turn_display_assistant_text = main_final_text
                 return
 
             correction = (
@@ -175,26 +196,35 @@ class CheckpointReactAgent:
             )
             ctx1 = self._build_context(user_id, original_query)
 
-            user_notice = (
+            user_notice_text = (
                 "\n\n---\n"
                 "【提示】刚才的回答未通过质量自检，可能存在不准确、不完整或与问题不够贴切之处。"
                 "正在重新生成回复，请稍候。\n\n"
             )
-            all_emitted.append(user_notice)
-            yield user_notice
+            all_emitted.append(user_notice_text)
+            yield user_notice_text
 
-            fix_parts: list[str] = [user_notice]
+            fix_parts: list[str] = [user_notice_text]
             correction_msg = HumanMessage(content=correction)
             for delta in self._iter_assistant_stream_checkpoint(correction_msg, ctx1, tid):
                 fix_parts.append(delta)
                 all_emitted.append(delta)
                 yield delta
+            fix_final_text = (
+                (getattr(self, "_last_turn_final_assistant_text", None) or "").strip()
+                or "".join(fix_parts[1:]).strip()
+            )
+            self.last_turn_display_assistant_text = user_notice_text + fix_final_text
             note_assistant_stream_done("reflection", len("".join(fix_parts)))
         finally:
+            if not self.last_turn_display_assistant_text.strip():
+                self.last_turn_display_assistant_text = main_final_text or (
+                    (getattr(self, "_last_turn_final_assistant_text", None) or "").strip()
+                )
             try:
-                full_assistant = "".join(all_emitted)
-                if user_id and full_assistant.strip():
-                    enqueue_memory_job(user_id, original_query, full_assistant)
+                persist = self.last_turn_display_assistant_text.strip()
+                if user_id and persist:
+                    enqueue_memory_job(user_id, original_query, persist)
             except Exception as e:
                 logger.warning("[agent][checkpoint] 记忆抽取入队失败: %s", e)
             end_turn()

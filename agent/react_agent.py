@@ -9,6 +9,10 @@ from langgraph.errors import GraphRecursionError
 from agent.react_graph_build import compile_react_agent
 from rag.warmup import maybe_preload_rerank_cross_encoder
 from utils.config_utils import agent_conf
+from utils.agent_stream_display import (
+    assistant_final_display_text,
+    assistant_stream_visible_text,
+)
 from utils.latency_trace import end_turn, note_assistant_stream_done, start_turn
 from utils.log_utils import logger
 from utils.memory_inject import memory_inject_flags
@@ -80,6 +84,7 @@ class ReactAgent:
         input_dict = {"messages": trimmed}
         run_config = {"recursion_limit": self._recursion_limit}
         prev_assistant_text = ""
+        last_ai: AIMessage | None = None
         try:
             stream_iter = self.agent.stream(
                 input_dict,
@@ -94,7 +99,8 @@ class ReactAgent:
                 latest = raw_msgs[-1]
                 if not isinstance(latest, AIMessage):
                     continue
-                text = (latest.content or "").strip()
+                last_ai = latest
+                text = assistant_stream_visible_text(latest).strip()
                 if not text:
                     continue
                 if len(text) > len(prev_assistant_text) and text.startswith(
@@ -117,6 +123,10 @@ class ReactAgent:
                 "\n\n[提示] 本轮智能体推理步数已达上限，已停止。"
                 "若问题较复杂，可拆成更短的问题分步提问，或在配置中适当调大 agent_recursion_limit。"
             )
+        finally:
+            self._last_turn_final_assistant_text = (
+                assistant_final_display_text(last_ai) if last_ai else ""
+            )
 
     def execute_stream(self, messages: list[dict], user_id: str | None = None):
         """
@@ -127,7 +137,8 @@ class ReactAgent:
             user_id: 当前用户标识；有则从长期记忆检索摘要/画像并注入 context
 
         Yields:
-            str: 本轮助手回复的增量文本片段（拼接后与最终回复一致）。
+            str: 本轮助手流式增量（可含推理/思考过程，供前台实时展示）。
+            会话持久化与 last_turn_display_assistant_text 为去掉推理后的正文。
             若开启 reflection：先发主回答流式增量，结束后再做审核；未达标时先 yield 一段用户可见提示，再流式输出修正轮。
         """
         # 验证信息
@@ -142,23 +153,33 @@ class ReactAgent:
         original_query = (messages[-1].get("content") or "").strip()
         start_turn(original_query)
         all_emitted: list[str] = []
+        self.last_turn_display_assistant_text = ""
+        main_final_text = ""
+        fix_final_text = ""
+        user_notice_text = ""
         try:
             # 长期记忆注入（进 LangGraph context，由中间件拼进 system）
             ctx0 = self._build_context(user_id, original_query)
 
-            # 主回答：LangGraph 流式增量，同时拼出完整 draft 供后面自检
+            # 主回答：LangGraph 流式增量（可含推理过程）；最终正文见 _last_turn_final_assistant_text
             draft_parts: list[str] = []
             for delta in self._iter_assistant_stream(trimmed, ctx0):
                 draft_parts.append(delta)
                 all_emitted.append(delta)
                 yield delta
-            draft = "".join(draft_parts)
+            main_final_text = (
+                (getattr(self, "_last_turn_final_assistant_text", None) or "").strip()
+                or "".join(draft_parts).strip()
+            )
+            draft = main_final_text
             note_assistant_stream_done("main", len(draft))
 
             # reflection 未开启，或主回答为空：不再自检、不加轮
             if not bool(agent_conf.get("reflection_enabled", False)):
+                self.last_turn_display_assistant_text = main_final_text
                 return
             if not draft.strip():
+                self.last_turn_display_assistant_text = main_final_text
                 return
 
             # 主回答流结束后的 LLM 自检（见 config/agent.yml reflection_*）
@@ -175,6 +196,7 @@ class ReactAgent:
             )
             # 分数达标或不允许额外轮次：结束
             if score >= min_score or extra_turns <= 0:
+                self.last_turn_display_assistant_text = main_final_text
                 return
 
             # 修正轮：仅内存里追加 assistant+user，再流式；不入 session，记忆注入仍用 original_query
@@ -189,25 +211,34 @@ class ReactAgent:
             trimmed2 = trim_conversation_messages(messages_retry, self._max_messages)
             ctx1 = self._build_context(user_id, original_query)
 
-            user_notice = (
+            user_notice_text = (
                 "\n\n---\n"
                 "【提示】刚才的回答未通过质量自检，可能存在不准确、不完整或与问题不够贴切之处。"
                 "正在重新生成回复，请稍候。\n\n"
             )
-            all_emitted.append(user_notice)
-            yield user_notice
+            all_emitted.append(user_notice_text)
+            yield user_notice_text
 
-            fix_parts: list[str] = [user_notice]
+            fix_parts: list[str] = [user_notice_text]
             for delta in self._iter_assistant_stream(trimmed2, ctx1):
                 fix_parts.append(delta)
                 all_emitted.append(delta)
                 yield delta
+            fix_final_text = (
+                (getattr(self, "_last_turn_final_assistant_text", None) or "").strip()
+                or "".join(fix_parts[1:]).strip()
+            )
+            self.last_turn_display_assistant_text = user_notice_text + fix_final_text
             note_assistant_stream_done("reflection", len("".join(fix_parts)))
         finally:
+            if not self.last_turn_display_assistant_text.strip():
+                self.last_turn_display_assistant_text = main_final_text or (
+                    (getattr(self, "_last_turn_final_assistant_text", None) or "").strip()
+                )
             try:
-                full_assistant = "".join(all_emitted)
-                if user_id and full_assistant.strip():
-                    enqueue_memory_job(user_id, original_query, full_assistant)
+                persist = self.last_turn_display_assistant_text.strip()
+                if user_id and persist:
+                    enqueue_memory_job(user_id, original_query, persist)
             except Exception as e:
                 logger.warning("[agent] 记忆抽取入队失败: %s", e)
             end_turn()
