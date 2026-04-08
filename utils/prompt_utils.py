@@ -148,5 +148,23 @@ def format_memory_system_prompt(memory: str, base: str) -> str:
     return _mem_inject_template.format(memory=memory, base=base)
 
 
+def append_original_query_anchor(base: str, original_query: str) -> str:
+    """
+    在 system 末尾追加「本轮原始问题」锚定块，减少 ReAct 多步中偏离用户意图。
+
+    在 create_agent 的 dynamic_prompt 中于记忆注入之后拼接，使每次 model 调用均可见。
+    """
+    q = (original_query or "").strip()
+    if not q:
+        return base
+    return (
+        base
+        + "\n\n### 本轮用户问题（锚定）\n"
+        + "以下为用户在本轮输入的**原始问题**。你在每一次思考、选择工具、解读工具结果与撰写最终回复时，"
+        + "都必须**直接服务于此问题**：不要偏题，不要擅自替用户改题，不要为无关目的调用工具。\n\n"
+        + q
+    )
+
+
 if __name__ == '__main__':
     print(load_report_prompts())

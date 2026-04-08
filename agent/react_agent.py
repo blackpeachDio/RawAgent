@@ -73,11 +73,10 @@ class ReactAgent:
 
     @staticmethod
     def _build_context(user_id: str | None, memory_query_for_inject: str) -> dict:
-        context: dict = {"report": False}
+        q = (memory_query_for_inject or "").strip()
+        context: dict = {"report": False, "original_query": q}
         if user_id:
-            context.update(
-                _inject_memory_context(user_id, (memory_query_for_inject or "").strip())
-            )
+            context.update(_inject_memory_context(user_id, q))
         return context
 
     def _iter_assistant_stream(self, trimmed: list[dict], context: dict):

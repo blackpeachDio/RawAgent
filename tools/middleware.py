@@ -2,7 +2,12 @@ import time
 from typing import Callable
 
 from utils.latency_trace import note_before_model, note_llm_api_wall, note_tool_done
-from utils.prompt_utils import format_memory_system_prompt, load_report_prompts, load_system_prompts
+from utils.prompt_utils import (
+    append_original_query_anchor,
+    format_memory_system_prompt,
+    load_report_prompts,
+    load_system_prompts,
+)
 from langchain.agents import AgentState
 from langchain.agents.middleware import (
     wrap_tool_call,
@@ -136,5 +141,10 @@ def build_system_prompt(request: ModelRequest):
     # 注入长期记忆（摘要、画像等），供模型参考（模板见 prompts/mem_inject_prompt.txt）
     memory = request.runtime.context.get("memory", "").strip()
     if memory:
-        return format_memory_system_prompt(memory, base)
+        base = format_memory_system_prompt(memory, base)
+
+    # 本轮原始用户问题：每次调 LLM 前写入 system，降低多步工具循环中的目标漂移
+    oq = request.runtime.context.get("original_query")
+    if bool(agent_conf.get("agent_anchor_original_query", True)):
+        base = append_original_query_anchor(base, oq if isinstance(oq, str) else "")
     return base

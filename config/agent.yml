@@ -12,6 +12,9 @@ conversation_max_messages: 40
 # 过小会提前中断多工具场景；过大可能无限循环。create_agent 默认编译为 10000，此处在 stream 时覆盖。
 agent_recursion_limit: 40
 
+# 是否在每次调主模型前把「本轮用户原始问题」追加进 system（锚定，减轻 ReAct 多步偏离）
+agent_anchor_original_query: true
+
 # 在线自检：主回答先照常流式输出，全部输出完毕后再调用审核 LLM；低于阈值则追加一轮流式修正（与首轮拼接为同一条 assistant，由调用方汇总）。
 reflection_enabled: false
 reflection_min_score: 0.65
