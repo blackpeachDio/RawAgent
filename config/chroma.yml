@@ -22,7 +22,10 @@ rerank_model: ../models/bge-reranker-base
 rerank_device: cpu
 # 个别模型需 trust_remote_code，一般为 false
 rerank_trust_remote_code: false
-# 精排分数（越高越相关，刻度因模型而异）：低于 rerank_refuse_min_score 则拒答（不返回片段）；不填则关闭
+# 精排分数（越高越相关，刻度因模型而异）：
+# - 配置 rerank_refuse_min_score 后，会剔除所有 rerank 分数 < 阈值的片段；
+# - 若剔除后没有任何片段通过阈值，则本轮 RAG 拒答（不返回片段）。
+# 不填则关闭阈值过滤/拒答逻辑。
 # rerank_refuse_min_score: -20.0
 
 # 检索用查询向量 LRU（重复/改写命中相同子串时跳过 DashScope）；0=关闭

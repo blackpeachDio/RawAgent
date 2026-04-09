@@ -366,16 +366,29 @@ def retrieve_documents(
     raw_scores = cross.score(pairs)
     scores = list(raw_scores)
     ranked = sorted(zip(pool, scores), key=lambda x: x[1], reverse=True)
-    top_docs = [d for d, _ in ranked[:final_k]]
-    top_scores = [s for _, s in ranked[:final_k]]
-
+    # rerank_refuse_min_score：
+    # - 对 rerank 后的候选逐条按分数阈值过滤（score < thr 的直接剔除）。
+    # - 若过滤后没有任何片段，则判定“本次检索整体不可靠”，返回空列表触发上层兜底拒答。
+    #
+    # 注意：CrossEncoder 分数通常是“越大越相关”，但绝对刻度随模型/版本可能变化，
+    # 阈值需要按你们数据分布做一次经验调参。
     min_score = chroma_conf.get("rerank_refuse_min_score")
-    if min_score is not None and top_scores:
+    if min_score is None:
+        top_docs = [d for d, _ in ranked[:final_k]]
+    else:
         thr = float(min_score)
-        best = float(top_scores[0])
-        if best < thr:
+        kept: list[Document] = []
+        for d, s in ranked:
+            if float(s) < thr:
+                continue
+            kept.append(d)
+            if len(kept) >= final_k:
+                break
+        top_docs = kept
+        if not top_docs:
+            best = float(ranked[0][1]) if ranked else float("-inf")
             logger.warning(
-                "[RAG] 拒答：精排最高分 %.4f < 阈值 %.4f",
+                "[RAG] 拒答：rerank 后无片段通过阈值 best=%.4f thr=%.4f",
                 best,
                 thr,
             )
