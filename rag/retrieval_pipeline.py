@@ -10,6 +10,7 @@ import os
 import time
 from typing import TYPE_CHECKING, Any
 
+from langchain_classic.retrievers.ensemble import EnsembleRetriever
 from langchain_core.callbacks import CallbackManagerForRetrieverRun  # 检索器回调类型（LangChain 要求签名）
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever  # 自定义「向量多句」检索器需继承它
@@ -74,17 +75,6 @@ def dedupe_preserve_order_cap(documents: list[Document], cap: int) -> list[Docum
     return out
 
 
-def _import_ensemble_retriever():
-    # 不同版本 LangChain 里 EnsembleRetriever 包路径可能不同，先试主流路径
-    try:
-        from langchain.retrievers.ensemble import EnsembleRetriever
-    except ImportError:
-        # 旧版或拆包后类在 langchain_classic 下
-        from langchain_classic.retrievers.ensemble import EnsembleRetriever
-    # 返回「类本身」，调用方再 ER(...) 实例化
-    return EnsembleRetriever
-
-
 class _FixedQueriesChromaRetriever(BaseRetriever):
     """对固定查询列表做 Chroma 批量向量召回；invoke 传入的 query 可忽略（Ensemble 仍传用户原句）。"""
 
@@ -128,33 +118,18 @@ def _build_hybrid_ensemble_retriever(
         multi_query_vector_retriever: _FixedQueriesChromaRetriever,
         bm25_retriever: Any,
 ) -> Any:
-    """
-    构造 LangChain EnsembleRetriever：向量多句一路 + BM25 一路，加权 RRF 融合。
-    权重与 RRF 常数来自 chroma_conf（可选）。
-    """
-    ensemble_retriever_class = _import_ensemble_retriever()
-    rank_fusion_rank_constant = int(chroma_conf.get("ensemble_rrf_c", 60))
-    raw_metadata_key = chroma_conf.get("ensemble_rrf_id_key")
-    if raw_metadata_key is None or not str(raw_metadata_key).strip():
-        reciprocal_rank_fusion_id_metadata_key = None
-    else:
-        reciprocal_rank_fusion_id_metadata_key = str(raw_metadata_key).strip()
-
+    """向量多句一路 + BM25 一路；可选 chroma 两路权重，不配则 Ensemble 默认等权 RRF。"""
     vector_branch_weight = chroma_conf.get("ensemble_vector_weight")
     bm25_branch_weight = chroma_conf.get("ensemble_bm25_weight")
-
-    ensemble_keyword_arguments: dict[str, Any] = {
+    ensemble_kwargs: dict[str, Any] = {
         "retrievers": [multi_query_vector_retriever, bm25_retriever],
-        "c": rank_fusion_rank_constant,
     }
-    if reciprocal_rank_fusion_id_metadata_key is not None:
-        ensemble_keyword_arguments["id_key"] = reciprocal_rank_fusion_id_metadata_key
     if vector_branch_weight is not None or bm25_branch_weight is not None:
-        ensemble_keyword_arguments["weights"] = [
+        ensemble_kwargs["weights"] = [
             float(0.5 if vector_branch_weight is None else vector_branch_weight),
             float(0.5 if bm25_branch_weight is None else bm25_branch_weight),
         ]
-    return ensemble_retriever_class(**ensemble_keyword_arguments)
+    return EnsembleRetriever(**ensemble_kwargs)
 
 
 def _recall_candidate_documents(

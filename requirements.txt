@@ -5,6 +5,8 @@ contextvars
 langgraph
 langchain-core
 langchain
+# hybrid BM25+向量 RRF（rag/retrieval_pipeline EnsembleRetriever）
+langchain-classic
 streamlit
 # RAG BGE 精排（config/chroma.yml rerank_enabled: true）
 sentence-transformers>=2.2.0
