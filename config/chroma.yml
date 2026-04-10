@@ -47,8 +47,15 @@ query_rewrite_cache_max_entries: 512
 # 合并去重后参与 BGE 打分的最大条数
 merge_max_pool: 60
 
-# --- 混合检索：BM25 与向量结果合并去重后再精排（全库建 BM25，首次略慢）---
+# --- 混合检索：BM25 与多查询向量经 EnsembleRetriever 加权 RRF 融合后再精排（全库建 BM25，首次略慢）---
 hybrid_bm25_enabled: false
+# 两路权重（不配则各 0.5）；向量路含 query_rewrite 的多条检索句
+# ensemble_vector_weight: 0.5
+# ensemble_bm25_weight: 0.5
+# RRF 公式中的 rank 平滑常数（默认 60）
+# ensemble_rrf_c: 60
+# RRF 去重键：填 metadata 字段名；不填则按正文去重。融合后再按 source+内容 hash 截断至 merge_max_pool
+# ensemble_rrf_id_key:
 
 data_path: ../data # 数据文件夹
 md5_hex_store: md5.text # 去重记录

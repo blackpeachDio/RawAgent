@@ -1,7 +1,5 @@
-import time
 from typing import Callable
 
-from utils.latency_trace import note_before_model, note_llm_api_wall, note_tool_done
 from utils.prompt_utils import (
     append_original_query_anchor,
     format_memory_system_prompt,
@@ -22,7 +20,7 @@ from langchain_core.messages import ToolMessage
 from langgraph.runtime import Runtime
 from langgraph.types import Command
 from utils.config_utils import agent_conf
-from utils.log_utils import logger
+from utils.log_utils import log_timing, logger
 from utils.token_utils import count_agent_llm_input_tokens_from_model_request
 
 
@@ -69,10 +67,11 @@ def monitor_tool(
     logger.info(f"[tool monitor]执行工具：{request.tool_call['name']}")
     logger.info(f"[tool monitor]传入参数：{request.tool_call['args']}")
 
-    t_tool = time.perf_counter()
+    tool_name = str(request.tool_call["name"])
+    log_timing("agent_tool", "start", name=tool_name)
     try:
         result = handler(request)
-        note_tool_done(str(request.tool_call["name"]), time.perf_counter() - t_tool)
+        log_timing("agent_tool", "end", name=tool_name)
         logger.info(f"[tool monitor]工具{request.tool_call['name']}调用成功")
 
         if request.tool_call['name'] == "fill_context_for_report":
@@ -81,7 +80,7 @@ def monitor_tool(
         return result
     except Exception as e:
         name = request.tool_call.get("name", "") if isinstance(request.tool_call, dict) else getattr(request.tool_call, "name", "")
-        note_tool_done(str(name or "unknown"), time.perf_counter() - t_tool)
+        log_timing("agent_tool", "end", name=str(name or "unknown"), error=True)
         logger.error(f"工具{name}调用失败，原因：{str(e)}", exc_info=True)
         tid = _tool_call_id(request)
         if tid is None:
@@ -95,7 +94,7 @@ def log_before_model(
         state: AgentState,          # 整个Agent智能体中的状态记录
         runtime: Runtime,           # 记录了整个执行过程中的上下文信息
 ):         # 在模型执行前输出日志
-    note_before_model()
+    log_timing("agent_llm", "before_model", messages_count=len(state["messages"]))
     logger.info(f"[log_before_model]即将调用模型，带有{len(state['messages'])}条消息。")
     logger.debug("[before_model] messages_count=%d", len(state["messages"]))
     return None
@@ -123,9 +122,9 @@ def log_wrap_model_tokens(
             )
         except Exception as e:
             logger.warning("[agent_llm] token 估算失败: %s", e)
-    t0 = time.perf_counter()
+    log_timing("agent_llm", "invoke_start")
     resp = handler(request)
-    note_llm_api_wall(time.perf_counter() - t0)
+    log_timing("agent_llm", "invoke_end")
     return resp
 
 

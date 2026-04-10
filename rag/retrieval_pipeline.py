@@ -1,22 +1,24 @@
 """
-RAG 检索管线：可选查询改写、可选 BM25 混合、合并去重、BGE 精排、可选分数拒答。
+RAG 检索管线：可选查询改写、可选 BM25 与向量 Ensemble（加权 RRF）、合并去重、BGE 精排、可选分数拒答。
 配置见 config/chroma.yml。
 """
 from __future__ import annotations
 
+import asyncio  # 用于 asyncio.run(ensemble.ainvoke) 并行跑向量+BM25 两路子检索器
 import hashlib
 import os
 import time
-from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any
 
+from langchain_core.callbacks import CallbackManagerForRetrieverRun  # 检索器回调类型（LangChain 要求签名）
 from langchain_core.documents import Document
+from langchain_core.retrievers import BaseRetriever  # 自定义「向量多句」检索器需继承它
+from pydantic import ConfigDict  # 允许 vector_store 等非标准字段放进 Pydantic 模型
 from rag.parent_store import get_parent_store
 from rag.query_embedding_cache import embed_queries_for_retrieval
 from rag.query_rewrite import rewrite_queries_cached
 from utils.config_utils import chroma_conf
-from utils.latency_trace import note_rag_retrieve_breakdown
-from utils.log_utils import logger
+from utils.log_utils import log_timing, logger
 
 if TYPE_CHECKING:
     from langchain_chroma import Chroma
@@ -46,6 +48,141 @@ def dedupe_documents(documents: list[Document]) -> list[Document]:
         seen.add(k)
         out.append(d)
     return out
+
+
+def dedupe_preserve_order_cap(documents: list[Document], cap: int) -> list[Document]:
+    """按 _doc_key 去重，保持输入顺序，最多保留 cap 条（用于 RRF 融合后的池截断）。"""
+    # 上限非正：直接返回空，避免无意义遍历
+    if cap <= 0:
+        return []
+    # 已经出现过的「来源+正文指纹」，用于去重
+    seen: set[str] = set()
+    # 去重后按原顺序收集的文档列表
+    out: list[Document] = []
+    # 按 RRF 排好的顺序依次看每条文档（靠前的分数更高）
+    for d in documents:
+        # 与 dedupe_documents 相同的键：同一段内容、同一 source 视为重复
+        k = _doc_key(d)
+        # 这条已经选过了，跳过（保留第一次出现 = 保留更高 RRF 排名那条）
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(d)
+        # 凑够 merge_max_pool 条就停，后面不再进精排池
+        if len(out) >= cap:
+            break
+    return out
+
+
+def _import_ensemble_retriever():
+    # 不同版本 LangChain 里 EnsembleRetriever 包路径可能不同，先试主流路径
+    try:
+        from langchain.retrievers.ensemble import EnsembleRetriever
+    except ImportError:
+        # 旧版或拆包后类在 langchain_classic 下
+        from langchain_classic.retrievers.ensemble import EnsembleRetriever
+    # 返回「类本身」，调用方再 ER(...) 实例化
+    return EnsembleRetriever
+
+
+class _FixedQueriesChromaRetriever(BaseRetriever):
+    """对固定查询列表做 Chroma 批量向量召回；invoke 传入的 query 可忽略（Ensemble 仍传用户原句）。"""
+
+    # Chroma 客户端不是 Pydantic 标准类型，必须允许任意类型字段
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    vector_store: Any  # 已连好的 Chroma 向量库实例
+    queries: list[str]  # 已算好的检索句列表（含原问 + 改写句）
+    fetch_k: int  # 每句从向量库取几条候选
+
+    def _get_relevant_documents(
+            self,
+            query: str,
+            *,
+            run_manager: CallbackManagerForRetrieverRun,
+    ) -> list[Document]:
+        # LangChain 会传入 query，但这里故意只用 self.queries（改写结果在进 Ensemble 前就定好了）
+        return _vector_search_chroma_batch(self.vector_store, self.queries, self.fetch_k)
+
+
+def _invoke_ensemble_hybrid(ensemble: Any, query: str) -> list[Document]:
+    """优先 ainvoke + asyncio.run 以并行子检索器；已在事件循环内则退回顺序 invoke。"""
+    # 探测当前线程是否已在 asyncio 事件循环里（例如在 async Web 框架中）
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        # 没有运行中的循环：可以安全地用 asyncio.run 包一层
+        try:
+            # ainvoke 内部会对多个子 retriever 并发 gather，向量与 BM25 同时跑
+            return asyncio.run(ensemble.ainvoke(query))
+        except Exception as e:
+            # 异步路径失败（环境限制等）：退回同步 invoke，两路顺序执行
+            logger.warning("[RAG] Ensemble ainvoke 失败，退回 invoke: %s", e)
+            return ensemble.invoke(query)
+    # 已在事件循环内：不能再 asyncio.run，否则嵌套会报错，只能同步顺序 invoke
+    logger.debug("[RAG] Ensemble：检测到运行中事件循环，使用同步 invoke")
+    return ensemble.invoke(query)
+
+
+def _build_hybrid_ensemble_retriever(
+        multi_query_vector_retriever: _FixedQueriesChromaRetriever,
+        bm25_retriever: Any,
+) -> Any:
+    """
+    构造 LangChain EnsembleRetriever：向量多句一路 + BM25 一路，加权 RRF 融合。
+    权重与 RRF 常数来自 chroma_conf（可选）。
+    """
+    ensemble_retriever_class = _import_ensemble_retriever()
+    rank_fusion_rank_constant = int(chroma_conf.get("ensemble_rrf_c", 60))
+    raw_metadata_key = chroma_conf.get("ensemble_rrf_id_key")
+    if raw_metadata_key is None or not str(raw_metadata_key).strip():
+        reciprocal_rank_fusion_id_metadata_key = None
+    else:
+        reciprocal_rank_fusion_id_metadata_key = str(raw_metadata_key).strip()
+
+    vector_branch_weight = chroma_conf.get("ensemble_vector_weight")
+    bm25_branch_weight = chroma_conf.get("ensemble_bm25_weight")
+
+    ensemble_keyword_arguments: dict[str, Any] = {
+        "retrievers": [multi_query_vector_retriever, bm25_retriever],
+        "c": rank_fusion_rank_constant,
+    }
+    if reciprocal_rank_fusion_id_metadata_key is not None:
+        ensemble_keyword_arguments["id_key"] = reciprocal_rank_fusion_id_metadata_key
+    if vector_branch_weight is not None or bm25_branch_weight is not None:
+        ensemble_keyword_arguments["weights"] = [
+            float(0.5 if vector_branch_weight is None else vector_branch_weight),
+            float(0.5 if bm25_branch_weight is None else bm25_branch_weight),
+        ]
+    return ensemble_retriever_class(**ensemble_keyword_arguments)
+
+
+def _recall_candidate_documents(
+        multi_query_vector_retriever: _FixedQueriesChromaRetriever,
+        normalized_user_query: str,
+        bm25_retriever: Any | None,
+        hybrid_bm25_config_enabled: bool,
+) -> tuple[list[Document], bool]:
+    """
+    粗召回：可选「向量 + BM25」Ensemble（RRF），否则仅向量多句 batch。
+    返回 (候选文档列表, 是否已做 RRF 融合)；后者决定后续用哪种去重截断策略。
+    """
+    hybrid_retrieval_active = hybrid_bm25_config_enabled and bm25_retriever is not None
+    if not hybrid_retrieval_active:
+        documents = multi_query_vector_retriever.invoke(normalized_user_query)
+        return documents, False
+
+    try:
+        hybrid_ensemble = _build_hybrid_ensemble_retriever(
+            multi_query_vector_retriever,
+            bm25_retriever,
+        )
+        documents = _invoke_ensemble_hybrid(hybrid_ensemble, normalized_user_query)
+        return documents, True
+    except Exception as exc:
+        logger.warning("[RAG] Ensemble 混合检索失败，回退仅向量: %s", exc)
+        documents = multi_query_vector_retriever.invoke(normalized_user_query)
+        return documents, False
 
 
 def expand_parent_documents(documents: list[Document]) -> list[Document]:
@@ -276,151 +413,156 @@ def retrieve_documents(
         bm25_retriever: Any | None,
 ) -> list[Document]:
     """
-    粗排（多路向量 ± BM25）→ 合并去重 → BGE 精排 → 可选拒答（空列表）。
+    端到端检索：粗召回（多句向量 ± BM25 的 Ensemble RRF）→ 池截断 → 可选 CrossEncoder 精排
+    → 父子块展开；可按配置因分数阈值拒答（返回空列表）。
+    各段耗时：grep [timing] scope=rag_retrieve，用相邻两条 wall= 时间戳对减。
     """
-    final_k = int(chroma_conf["k"])
-    fetch_k = int(chroma_conf.get("fetch_k", max(final_k, 20)))
-    if fetch_k < final_k:
+    log_timing("rag_retrieve", "retrieve_enter")
+    # --- 最终要交给生成模型的片段条数、向量侧每句拉取条数（与 chroma.yml 中 k / fetch_k 对应）---
+    context_document_count = int(chroma_conf["k"])
+    vector_fetch_count = int(chroma_conf.get("fetch_k", max(context_document_count, 20)))
+    if vector_fetch_count < context_document_count:
         logger.warning(
             "[RAG] fetch_k(%s) < k(%s)，已把 fetch_k 调整为 k",
-            fetch_k,
-            final_k,
+            vector_fetch_count,
+            context_document_count,
         )
-        fetch_k = final_k
+        vector_fetch_count = context_document_count
 
-    rewrite_on = bool(chroma_conf.get("query_rewrite_enabled", False))
-    hybrid_on = bool(chroma_conf.get("hybrid_bm25_enabled", False))
-    merge_cap = int(chroma_conf.get("merge_max_pool", 60))
+    query_rewrite_config_enabled = bool(chroma_conf.get("query_rewrite_enabled", False))
+    hybrid_bm25_config_enabled = bool(chroma_conf.get("hybrid_bm25_enabled", False))
+    merge_pool_max_size = int(chroma_conf.get("merge_max_pool", 60))
 
-    rewrite_s = 0.0
-    if rewrite_on:
-        t_rw = time.perf_counter()
-        queries = rewrite_queries_for_retrieval(query)
-        rewrite_s = time.perf_counter() - t_rw
+    # --- 查询改写：得到用于向量检索的短句列表（首条通常为原问）---
+    if query_rewrite_config_enabled:
+        retrieval_query_texts = rewrite_queries_for_retrieval(query)
     else:
-        queries = [query.strip()]
+        retrieval_query_texts = [query.strip()]
+    log_timing("rag_retrieve", "retrieval_queries_ready")
 
-    pool: list[Document] = []
-    do_bm25 = hybrid_on and bm25_retriever is not None
+    multi_query_vector_retriever = _FixedQueriesChromaRetriever(
+        vector_store=vector_store,
+        queries=retrieval_query_texts,
+        fetch_k=vector_fetch_count,
+    )
+    normalized_user_query = query.strip()
 
-    t_re = time.perf_counter()
-    with ThreadPoolExecutor(max_workers=2) as ex:
-        vec_fut = ex.submit(_vector_search_chroma_batch, vector_store, queries, fetch_k)
-        bm25_fut = ex.submit(bm25_retriever.invoke, query) if do_bm25 else None
+    # --- 粗召回：可选向量+BM25 RRF；再按策略去重并限制进入精排池的规模 ---
+    candidate_documents, recall_used_reciprocal_rank_fusion = _recall_candidate_documents(
+        multi_query_vector_retriever,
+        normalized_user_query,
+        bm25_retriever,
+        hybrid_bm25_config_enabled,
+    )
+    if recall_used_reciprocal_rank_fusion:
+        # RRF 已按融合分排序：在去重时保留更靠前的同键文档
+        candidate_documents = dedupe_preserve_order_cap(candidate_documents, merge_pool_max_size)
+    else:
+        # 纯向量：先去重再截取前 merge_pool_max_size 条
+        candidate_documents = dedupe_documents(candidate_documents)[:merge_pool_max_size]
+    log_timing("rag_retrieve", "recall_and_truncate_done")
 
-        pool.extend(vec_fut.result())
+    cross_encoder_rerank_enabled = bool(chroma_conf.get("rerank_enabled", False))
 
-        if bm25_fut is not None:
-            try:
-                extra = bm25_fut.result()
-                if isinstance(extra, list):
-                    pool.extend(extra[:fetch_k])
-            except Exception as e:
-                logger.warning("[RAG] BM25 检索失败，仅用向量: %s", e)
-
-    pool = dedupe_documents(pool)[:merge_cap]
-    recall_s = time.perf_counter() - t_re
-
-    rerank_on = bool(chroma_conf.get("rerank_enabled", False))
-    if not pool:
-        note_rag_retrieve_breakdown(
-            rewrite_on=rewrite_on,
-            rewrite_s=rewrite_s,
-            recall_s=recall_s,
-            rerank_on=rerank_on,
-            rerank_s=0.0,
-            expand_s=0.0,
+    if not candidate_documents:
+        log_timing(
+            "rag_retrieve",
+            "summary",
+            rewrite_on=query_rewrite_config_enabled,
+            rerank_on=cross_encoder_rerank_enabled,
             pool_len=0,
             out_len=0,
         )
         return []
 
-    rerank_s = 0.0
-    expand_s = 0.0
-    out_len = 0
-
-    if not rerank_on:
-        t_exp = time.perf_counter()
-        out = expand_parent_documents(pool[:final_k])
-        expand_s = time.perf_counter() - t_exp
-        out_len = len(out)
-        note_rag_retrieve_breakdown(
-            rewrite_on=rewrite_on,
-            rewrite_s=rewrite_s,
-            recall_s=recall_s,
-            rerank_on=False,
-            rerank_s=0.0,
-            expand_s=expand_s,
-            pool_len=len(pool),
-            out_len=out_len,
+    # --- 不精排：直接取池中前 context_document_count 条并做父子块展开 ---
+    if not cross_encoder_rerank_enabled:
+        context_documents = expand_parent_documents(
+            candidate_documents[:context_document_count],
         )
-        return out
+        log_timing("rag_retrieve", "parent_expand_done")
+        log_timing(
+            "rag_retrieve",
+            "summary",
+            rewrite_on=query_rewrite_config_enabled,
+            rerank_on=False,
+            pool_len=len(candidate_documents),
+            out_len=len(context_documents),
+        )
+        return context_documents
 
+    # --- CrossEncoder 精排：query–passage 打分，按分排序后取 top 或按阈值过滤 ---
     try:
-        cross = get_cached_cross_encoder()
-    except ImportError as e:
-        raise ImportError("BGE 精排需: pip install sentence-transformers langchain-classic") from e
+        cross_encoder = get_cached_cross_encoder()
+    except ImportError as import_error:
+        raise ImportError(
+            "BGE 精排需: pip install sentence-transformers langchain-classic",
+        ) from import_error
 
-    t_rr = time.perf_counter()
-    pairs = [(query.strip(), d.page_content) for d in pool]
-    raw_scores = cross.score(pairs)
-    scores = list(raw_scores)
-    ranked = sorted(zip(pool, scores), key=lambda x: x[1], reverse=True)
-    # rerank_refuse_min_score：
-    # - 对 rerank 后的候选逐条按分数阈值过滤（score < thr 的直接剔除）。
-    # - 若过滤后没有任何片段，则判定“本次检索整体不可靠”，返回空列表触发上层兜底拒答。
-    #
-    # 注意：CrossEncoder 分数通常是“越大越相关”，但绝对刻度随模型/版本可能变化，
-    # 阈值需要按你们数据分布做一次经验调参。
-    min_score = chroma_conf.get("rerank_refuse_min_score")
-    if min_score is None:
-        top_docs = [d for d, _ in ranked[:final_k]]
+    log_timing("rag_retrieve", "cross_encoder_rerank_start")
+    query_document_pairs = [
+        (normalized_user_query, document.page_content) for document in candidate_documents
+    ]
+    rerank_score_sequence = cross_encoder.score(query_document_pairs)
+    rerank_scores = list(rerank_score_sequence)
+    documents_with_rerank_scores = list(zip(candidate_documents, rerank_scores))
+    documents_sorted_by_rerank_score = sorted(
+        documents_with_rerank_scores,
+        key=lambda document_and_score: document_and_score[1],
+        reverse=True,
+    )
+
+    # 配置 rerank_refuse_min_score：低于阈值的片段丢弃；若全无则拒答（空列表）。
+    rerank_refuse_minimum_score = chroma_conf.get("rerank_refuse_min_score")
+    if rerank_refuse_minimum_score is None:
+        reranked_top_documents = [
+            document
+            for document, _score in documents_sorted_by_rerank_score[:context_document_count]
+        ]
     else:
-        thr = float(min_score)
-        kept: list[Document] = []
-        for d, s in ranked:
-            if float(s) < thr:
+        minimum_rerank_score_threshold = float(rerank_refuse_minimum_score)
+        documents_above_threshold: list[Document] = []
+        for document, score in documents_sorted_by_rerank_score:
+            if float(score) < minimum_rerank_score_threshold:
                 continue
-            kept.append(d)
-            if len(kept) >= final_k:
+            documents_above_threshold.append(document)
+            if len(documents_above_threshold) >= context_document_count:
                 break
-        top_docs = kept
-        if not top_docs:
-            best = float(ranked[0][1]) if ranked else float("-inf")
+        reranked_top_documents = documents_above_threshold
+        if not reranked_top_documents:
+            best_score = (
+                float(documents_sorted_by_rerank_score[0][1])
+                if documents_sorted_by_rerank_score
+                else float("-inf")
+            )
             logger.warning(
                 "[RAG] 拒答：rerank 后无片段通过阈值 best=%.4f thr=%.4f",
-                best,
-                thr,
+                best_score,
+                minimum_rerank_score_threshold,
             )
-            rerank_s = time.perf_counter() - t_rr
-            note_rag_retrieve_breakdown(
-                rewrite_on=rewrite_on,
-                rewrite_s=rewrite_s,
-                recall_s=recall_s,
+            log_timing("rag_retrieve", "cross_encoder_rerank_done")
+            log_timing(
+                "rag_retrieve",
+                "summary",
+                rewrite_on=query_rewrite_config_enabled,
                 rerank_on=True,
-                rerank_s=rerank_s,
-                expand_s=0.0,
-                pool_len=len(pool),
+                pool_len=len(candidate_documents),
                 out_len=0,
             )
             return []
 
-    rerank_s = time.perf_counter() - t_rr
-    t_exp = time.perf_counter()
-    out = expand_parent_documents(top_docs)
-    expand_s = time.perf_counter() - t_exp
-    out_len = len(out)
-    note_rag_retrieve_breakdown(
-        rewrite_on=rewrite_on,
-        rewrite_s=rewrite_s,
-        recall_s=recall_s,
+    log_timing("rag_retrieve", "cross_encoder_rerank_done")
+    context_documents = expand_parent_documents(reranked_top_documents)
+    log_timing("rag_retrieve", "parent_expand_done")
+    log_timing(
+        "rag_retrieve",
+        "summary",
+        rewrite_on=query_rewrite_config_enabled,
         rerank_on=True,
-        rerank_s=rerank_s,
-        expand_s=expand_s,
-        pool_len=len(pool),
-        out_len=out_len,
+        pool_len=len(candidate_documents),
+        out_len=len(context_documents),
     )
-    return out
+    return context_documents
 
 
 REFUSAL_MESSAGE = "当前知识库中未检索到与您问题足够相关的可靠资料，暂无法基于资料作答。请尝试换一种问法或联系人工客服。"
