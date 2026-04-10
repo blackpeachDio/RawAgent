@@ -33,8 +33,7 @@ from utils.agent_stream_display import (
     assistant_stream_visible_text,
 )
 from utils.config_utils import agent_conf
-from utils.latency_trace import end_turn, note_assistant_stream_done, start_turn
-from utils.log_utils import logger
+from utils.log_utils import log_timing, logger
 from utils.memory_utils import validate_chat_messages
 
 
@@ -145,7 +144,8 @@ class CheckpointReactAgent:
         original_query = (messages[-1].get("content") or "").strip()
         tid = (thread_id or "").strip() or make_checkpoint_thread_id(user_id, session_tag)
 
-        start_turn(original_query)
+        query_preview = original_query[:160] + ("…" if len(original_query) > 160 else "")
+        log_timing("agent_turn", "start", query_preview=query_preview, checkpoint=True)
         all_emitted: list[str] = []
         self.last_turn_display_assistant_text = ""
         main_final_text = ""
@@ -165,7 +165,7 @@ class CheckpointReactAgent:
                 or "".join(draft_parts).strip()
             )
             draft = main_final_text
-            note_assistant_stream_done("main", len(draft))
+            log_timing("agent_turn", "main_stream_done", char_count=len(draft), checkpoint=True)
 
             if not bool(agent_conf.get("reflection_enabled", False)):
                 self.last_turn_display_assistant_text = main_final_text
@@ -214,7 +214,12 @@ class CheckpointReactAgent:
                 or "".join(fix_parts[1:]).strip()
             )
             self.last_turn_display_assistant_text = user_notice_text + fix_final_text
-            note_assistant_stream_done("reflection", len("".join(fix_parts)))
+            log_timing(
+                "agent_turn",
+                "reflection_stream_done",
+                char_count=len("".join(fix_parts)),
+                checkpoint=True,
+            )
         finally:
             if not self.last_turn_display_assistant_text.strip():
                 self.last_turn_display_assistant_text = main_final_text or (
@@ -226,4 +231,4 @@ class CheckpointReactAgent:
                     enqueue_memory_job(user_id, original_query, persist)
             except Exception as e:
                 logger.warning("[agent][checkpoint] 记忆抽取入队失败: %s", e)
-            end_turn()
+            log_timing("agent_turn", "end", checkpoint=True)

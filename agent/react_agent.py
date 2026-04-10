@@ -13,8 +13,7 @@ from utils.agent_stream_display import (
     assistant_final_display_text,
     assistant_stream_visible_text,
 )
-from utils.latency_trace import end_turn, note_assistant_stream_done, start_turn
-from utils.log_utils import logger
+from utils.log_utils import log_timing, logger
 from utils.memory_inject import memory_inject_flags
 from utils.memory_utils import trim_conversation_messages, validate_chat_messages
 from memory.factual_multi import format_factual_block_for_injection
@@ -150,7 +149,8 @@ class ReactAgent:
         trimmed = trim_conversation_messages(messages, self._max_messages)
         # 本轮用户原文：记忆注入与自检都用它；修正轮时也不能改成审核反馈里的句子去检索
         original_query = (messages[-1].get("content") or "").strip()
-        start_turn(original_query)
+        query_preview = original_query[:160] + ("…" if len(original_query) > 160 else "")
+        log_timing("agent_turn", "start", query_preview=query_preview)
         all_emitted: list[str] = []
         self.last_turn_display_assistant_text = ""
         main_final_text = ""
@@ -171,7 +171,7 @@ class ReactAgent:
                 or "".join(draft_parts).strip()
             )
             draft = main_final_text
-            note_assistant_stream_done("main", len(draft))
+            log_timing("agent_turn", "main_stream_done", char_count=len(draft))
 
             # reflection 未开启，或主回答为空：不再自检、不加轮
             if not bool(agent_conf.get("reflection_enabled", False)):
@@ -228,7 +228,11 @@ class ReactAgent:
                 or "".join(fix_parts[1:]).strip()
             )
             self.last_turn_display_assistant_text = user_notice_text + fix_final_text
-            note_assistant_stream_done("reflection", len("".join(fix_parts)))
+            log_timing(
+                "agent_turn",
+                "reflection_stream_done",
+                char_count=len("".join(fix_parts)),
+            )
         finally:
             if not self.last_turn_display_assistant_text.strip():
                 self.last_turn_display_assistant_text = main_final_text or (
@@ -240,7 +244,7 @@ class ReactAgent:
                     enqueue_memory_job(user_id, original_query, persist)
             except Exception as e:
                 logger.warning("[agent] 记忆抽取入队失败: %s", e)
-            end_turn()
+            log_timing("agent_turn", "end")
 
 
 if __name__ == "__main__":
