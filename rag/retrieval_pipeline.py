@@ -162,22 +162,20 @@ def _recall_candidate_documents(
 
 def expand_parent_documents(documents: list[Document]) -> list[Document]:
     """
-    父子块索引：命中子块后展开为父块正文。
-    优先从 SQLite 映射表按 parent_id 取全文；若无表或查不到，则回退 metadata 中的 parent_content（旧索引兼容）。
+    父子块：子块命中后，仅根据 metadata 中的 parent_id 从 SQLite 映射表取父块正文。
+    无 parent_id、未配置映射表、或表中无该 id 时，保留子块正文；同一父块多子块命中只输出一条父块。
     """
     if not documents:
         return []
     store = get_parent_store()
-    need_fetch: list[str] = []
+    parent_ids_ordered: list[str] = []
     for d in documents:
-        m = d.metadata or {}
-        pid = m.get("parent_id")
-        if not pid or m.get("parent_content"):
-            continue
-        need_fetch.append(str(pid))
+        pid = (d.metadata or {}).get("parent_id")
+        if pid:
+            parent_ids_ordered.append(str(pid))
     by_id: dict[str, str] = {}
-    if store and need_fetch:
-        by_id = store.get_many(list(dict.fromkeys(need_fetch)))
+    if store and parent_ids_ordered:
+        by_id = store.get_many(list(dict.fromkeys(parent_ids_ordered)))
 
     out: list[Document] = []
     seen_parent: set[str] = set()
@@ -188,11 +186,7 @@ def expand_parent_documents(documents: list[Document]) -> list[Document]:
             out.append(d)
             continue
         pid_s = str(pid)
-        ptext = meta.get("parent_content")
-        if not ptext:
-            ptext = by_id.get(pid_s)
-        if not ptext and store:
-            ptext = store.get(pid_s)
+        ptext = by_id.get(pid_s)
         if ptext:
             if pid_s in seen_parent:
                 continue
@@ -200,12 +194,13 @@ def expand_parent_documents(documents: list[Document]) -> list[Document]:
             meta.pop("parent_content", None)
             meta["expanded_from"] = "parent_child"
             out.append(Document(page_content=str(ptext), metadata=meta))
-        else:
-            logger.warning(
-                "[RAG] 父子展开失败：parent_id=%s 无映射且无 parent_content，保留子块",
+            continue
+        if store:
+            logger.debug(
+                "[RAG] parent_id=%s 在映射表中无记录，使用子块正文",
                 pid_s,
             )
-            out.append(d)
+        out.append(d)
     return out
 
 
@@ -388,8 +383,8 @@ def retrieve_documents(
         bm25_retriever: Any | None,
 ) -> list[Document]:
     """
-    端到端检索：粗召回（多句向量 ± BM25 的 Ensemble RRF）→ 池截断 → 可选 CrossEncoder 精排
-    → 父子块展开；可按配置因分数阈值拒答（返回空列表）。
+    端到端检索：粗召回 → 池截断 → 父子块展开（Small-to-Big）→ 可选 CrossEncoder 精排 → 取 top-k；
+    可按配置因分数阈值拒答（返回空列表）。精排在展开之后，使打分与最终进上下文的正文一致。
     各段耗时：grep [timing] scope=rag_retrieve，用相邻两条 wall= 时间戳对减。
     """
     log_timing("rag_retrieve", "retrieve_enter")
@@ -450,23 +445,24 @@ def retrieve_documents(
         )
         return []
 
-    # --- 不精排：直接取池中前 context_document_count 条并做父子块展开 ---
+    # --- Small-to-Big：先按 parent_id 展成父块（与最终进上下文的段落一致），再 CrossEncoder 精排 ---
+    # 若先对子块 rerank 再换父块，分数与送入 LLM 的正文不对齐；业界常见做法是「最终 passage 上重排」。
+    expanded_documents = expand_parent_documents(candidate_documents)
+    log_timing("rag_retrieve", "parent_expand_done")
+
     if not cross_encoder_rerank_enabled:
-        context_documents = expand_parent_documents(
-            candidate_documents[:context_document_count],
-        )
-        log_timing("rag_retrieve", "parent_expand_done")
+        context_documents = expanded_documents[:context_document_count]
         log_timing(
             "rag_retrieve",
             "summary",
             rewrite_on=query_rewrite_config_enabled,
             rerank_on=False,
-            pool_len=len(candidate_documents),
+            pool_len=len(expanded_documents),
             out_len=len(context_documents),
         )
         return context_documents
 
-    # --- CrossEncoder 精排：query–passage 打分，按分排序后取 top 或按阈值过滤 ---
+    # --- CrossEncoder 精排：对展开后的 passage 做 query–passage 打分，再取 top 或按阈值过滤 ---
     try:
         cross_encoder = get_cached_cross_encoder()
     except ImportError as import_error:
@@ -476,11 +472,11 @@ def retrieve_documents(
 
     log_timing("rag_retrieve", "cross_encoder_rerank_start")
     query_document_pairs = [
-        (normalized_user_query, document.page_content) for document in candidate_documents
+        (normalized_user_query, document.page_content) for document in expanded_documents
     ]
     rerank_score_sequence = cross_encoder.score(query_document_pairs)
     rerank_scores = list(rerank_score_sequence)
-    documents_with_rerank_scores = list(zip(candidate_documents, rerank_scores))
+    documents_with_rerank_scores = list(zip(expanded_documents, rerank_scores))
     documents_sorted_by_rerank_score = sorted(
         documents_with_rerank_scores,
         key=lambda document_and_score: document_and_score[1],
@@ -521,20 +517,19 @@ def retrieve_documents(
                 "summary",
                 rewrite_on=query_rewrite_config_enabled,
                 rerank_on=True,
-                pool_len=len(candidate_documents),
+                pool_len=len(expanded_documents),
                 out_len=0,
             )
             return []
 
     log_timing("rag_retrieve", "cross_encoder_rerank_done")
-    context_documents = expand_parent_documents(reranked_top_documents)
-    log_timing("rag_retrieve", "parent_expand_done")
+    context_documents = reranked_top_documents
     log_timing(
         "rag_retrieve",
         "summary",
         rewrite_on=query_rewrite_config_enabled,
         rerank_on=True,
-        pool_len=len(candidate_documents),
+        pool_len=len(expanded_documents),
         out_len=len(context_documents),
     )
     return context_documents
