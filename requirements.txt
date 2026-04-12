@@ -8,6 +8,8 @@ langchain
 # hybrid BM25+向量 RRF（rag/retrieval_pipeline EnsembleRetriever）
 langchain-classic
 streamlit
+# 离线索引 PDF：复杂表格用 pdfplumber（rag/offline_index → utils.file_utils.pdf_loader）
+pdfplumber>=0.11.0
 # RAG BGE 精排（config/chroma.yml rerank_enabled: true）
 sentence-transformers>=2.2.0
 # 混合检索 BM25（hybrid_bm25_enabled: true）

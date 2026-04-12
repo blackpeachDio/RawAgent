@@ -1,7 +1,8 @@
 import hashlib
 import os
+from typing import Any
 
-from langchain_community.document_loaders import PyPDFLoader, TextLoader
+from langchain_community.document_loaders import TextLoader
 from langchain_core.documents import Document
 
 from utils.log_utils import logger
@@ -62,8 +63,68 @@ def listdir_with_allowed_type(path: str, allowed_types: tuple[str]) -> tuple[str
     return tuple(files)
 
 
+def _format_pdf_table(table: list[list[Any]]) -> str:
+    """将 pdfplumber 解析出的二维表转为按行可读的文本（单元格以 | 分隔）。"""
+    if not table:
+        return ""
+    lines: list[str] = []
+    for row in table:
+        if row is None:
+            continue
+        cells: list[str] = []
+        for cell in row:
+            if cell is None:
+                cells.append("")
+            else:
+                cells.append(str(cell).replace("\n", " ").strip())
+        lines.append(" | ".join(cells))
+    return "\n".join(lines)
+
+
 def pdf_loader(filepath: str, passwd=None) -> list[Document]:
-    return PyPDFLoader(filepath, passwd).load()
+    """
+    使用 pdfplumber 读取 PDF：逐页 extract_text(layout=True) + extract_tables()，
+    复杂表格结构化拼入正文后再进入向量切分。加密 PDF 可传 passwd。
+    """
+    import pdfplumber
+
+    open_kw: dict[str, Any] = {}
+    if passwd:
+        open_kw["password"] = passwd
+
+    documents: list[Document] = []
+    with pdfplumber.open(filepath, **open_kw) as pdf:
+        for page_index, page in enumerate(pdf.pages):
+            parts: list[str] = []
+            page_text = page.extract_text(layout=True)
+            if page_text and page_text.strip():
+                parts.append(page_text.strip())
+
+            tables = page.extract_tables() or []
+            for table_index, table in enumerate(tables):
+                if not table:
+                    continue
+                formatted = _format_pdf_table(table)
+                if not formatted.strip():
+                    continue
+                parts.append(f"[表格 {table_index + 1}]\n{formatted}")
+
+            body = "\n\n".join(parts).strip()
+            if not body:
+                continue
+
+            documents.append(
+                Document(
+                    page_content=body,
+                    metadata={
+                        "source": filepath,
+                        "page": page_index + 1,
+                        "loader": "pdfplumber",
+                    },
+                )
+            )
+
+    return documents
 
 
 def txt_loader(filepath: str) -> list[Document]:

@@ -14,9 +14,8 @@ rerank_enabled: true
 rerank_preload_on_startup: true
 # 访问 huggingface.co 超时：填镜像（等价于环境变量 HF_ENDPOINT）。国内可试 https://hf-mirror.com
 hf_endpoint: https://hf-mirror.com
-# HuggingFace 模型 id；或已下载到本地的文件夹路径（也可用 ../models/xxx 相对 utils 根）
-rerank_model: ../models/bge-reranker-base
-#rerank_model: BAAI/bge-reranker-base
+# HuggingFace 模型 id（运行时从 Hub / 镜像拉取，见 hf_endpoint）
+rerank_model: BAAI/bge-reranker-base
 
 # cpu 或 cuda / cuda:0
 rerank_device: cpu
@@ -55,6 +54,7 @@ hybrid_bm25_enabled: false
 
 data_path: ../data # 数据文件夹
 md5_hex_store: md5.text # 去重记录
+# PDF 离线索引用 pdfplumber（正文 layout + 表格 extract_tables），见 utils/file_utils.pdf_loader
 allow_knowledge_file_type: [ "txt", "pdf" ]
 
 chunk_size: 200
