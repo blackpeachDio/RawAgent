@@ -6,14 +6,12 @@ from utils.log_utils import logger
 
 
 def maybe_preload_rerank_cross_encoder() -> None:
-    """若开启 rerank 且配置预加载，则加载 CrossEncoder（幂等，内部有缓存）。"""
+    """
+    兼容旧入口名：精排已改为百炼在线 API，无需本地预加载模型。
+    rerank_preload_on_startup 保留为无操作，避免改 Agent 初始化代码。
+    """
     if not bool(chroma_conf.get("rerank_preload_on_startup", True)):
         return
     if not bool(chroma_conf.get("rerank_enabled", False)):
         return
-    try:
-        from rag.retrieval_pipeline import preload_rerank_cross_encoder
-
-        preload_rerank_cross_encoder()
-    except Exception as e:
-        logger.warning("[RAG] CrossEncoder 预加载未执行: %s", e)
+    logger.debug("[RAG] rerank 使用百炼 DashScope API，跳过本地预加载")

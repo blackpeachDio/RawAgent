@@ -1,6 +1,6 @@
 """
 在线查询：连接已有 Chroma 索引，检索 + 总结（RAG），供 Agent 工具调用。
-检索：可选查询改写、可选 BM25+向量 Ensemble（RRF）、向量粗排、合并去重、BGE 精排、可选分数拒答。
+检索：可选查询改写、可选 BM25+向量 Ensemble（RRF）、向量粗排、合并去重、百炼 qwen3-rerank 精排、可选分数拒答。
 """
 from langchain_chroma import Chroma
 from langchain_core.documents import Document

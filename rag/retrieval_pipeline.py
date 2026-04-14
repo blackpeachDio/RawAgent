@@ -1,12 +1,12 @@
 """
-RAG 检索管线：可选查询改写、可选 BM25 与向量 Ensemble（加权 RRF）、合并去重、BGE 精排、可选分数拒答。
+RAG 检索管线：可选查询改写、可选 BM25 与向量 Ensemble（加权 RRF）、合并去重、
+百炼 qwen3-rerank 在线精排（DashScope）、可选分数拒答。
 配置见 config/chroma.yml。
 """
 from __future__ import annotations
 
 import asyncio  # 用于 asyncio.run(ensemble.ainvoke) 并行跑向量+BM25 两路子检索器
 import hashlib
-import os
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -15,23 +15,15 @@ from langchain_core.callbacks import CallbackManagerForRetrieverRun  # 检索器
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever  # 自定义「向量多句」检索器需继承它
 from pydantic import ConfigDict  # 允许 vector_store 等非标准字段放进 Pydantic 模型
+from rag.dashscope_rerank import DEFAULT_RERANK_URL, dashscope_text_rerank
 from rag.parent_store import get_parent_store
 from rag.query_embedding_cache import embed_queries_for_retrieval
 from rag.query_rewrite import rewrite_queries_cached
-from utils.config_utils import chroma_conf
+from utils.config_utils import api_conf, chroma_conf
 from utils.log_utils import log_timing, logger
 
 if TYPE_CHECKING:
     from langchain_chroma import Chroma
-
-def _apply_hf_hub_endpoint() -> None:
-    if os.environ.get("HF_ENDPOINT"):
-        return
-    ep = chroma_conf.get("hf_endpoint") or chroma_conf.get("hf_mirror")
-    if ep and str(ep).strip():
-        os.environ["HF_ENDPOINT"] = str(ep).strip().rstrip("/")
-        logger.info("[RAG] HF_ENDPOINT=%s", os.environ["HF_ENDPOINT"])
-
 
 def _doc_key(d: Document) -> str:
     src = (d.metadata or {}).get("source") or ""
@@ -286,94 +278,52 @@ def build_bm25_retriever(vector_store: Chroma):
     return BM25Retriever.from_documents(docs, k=fk)
 
 
-_cross_encoder_cache: tuple[str, Any] | None = None
+def _dashscope_rerank_pairs(
+        query: str,
+        expanded_documents: list[Document],
+) -> list[tuple[Document, float]]:
+    """百炼 text-rerank：返回 (Document, relevance_score)，顺序与 API results 一致（已按分数降序）。"""
+    texts = [str(d.page_content or "") for d in expanded_documents]
+    model = str(chroma_conf.get("rerank_model") or "qwen3-rerank")
+    base_url = str(chroma_conf.get("rerank_api_url") or DEFAULT_RERANK_URL).strip()
+    top_n = min(500, len(texts))
+    return_documents = bool(chroma_conf.get("rerank_return_documents", True))
+    instruct = chroma_conf.get("rerank_instruct")
+    timeout_s = float(chroma_conf.get("rerank_timeout_seconds", 60.0))
+    api_key = str(api_conf.get("dashscope_api_key") or "").strip()
+    if not api_key:
+        raise RuntimeError("缺少 dashscope_api_key（config/api.yml 或 DASHSCOPE_API_KEY）")
 
-
-def get_cached_cross_encoder():
-    """同一进程内复用 CrossEncoder，避免每次检索重复加载模型。"""
-    global _cross_encoder_cache
-    from utils.path_utils import resolve_repo_path
-
-    _apply_hf_hub_endpoint()
-    from langchain_community.cross_encoders import HuggingFaceCrossEncoder
-
-    model_raw = chroma_conf.get("rerank_model") or "BAAI/bge-reranker-base"
-    if model_raw.startswith("BAAI/") or model_raw.startswith("intfloat/"):
-        model_name = model_raw
-    elif os.path.isdir(model_raw):
-        model_name = model_raw
-    else:
-        cand = resolve_repo_path(model_raw)
-        model_name = cand if os.path.isdir(cand) else model_raw
-
-    # 设备选择
-    requested_device = str(chroma_conf.get("rerank_device", "cpu"))
-    device = requested_device
-    if requested_device.startswith("cuda"):
-        # 部分环境的 torch 未编译 CUDA 时，强行把模型 device 设为 cuda 会触发
-        # `AssertionError: Torch not compiled with CUDA enabled`。
+    results = dashscope_text_rerank(
+        query=query,
+        documents=texts,
+        api_key=api_key,
+        model=model,
+        base_url=base_url,
+        top_n=top_n,
+        return_documents=return_documents,
+        instruct=str(instruct).strip() if instruct else None,
+        timeout_s=timeout_s,
+    )
+    n = len(expanded_documents)
+    out: list[tuple[Document, float]] = []
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        idx = item.get("index")
+        if idx is None:
+            continue
         try:
-            import torch
-
-            cuda_built = False
-            try:
-                cuda_built = bool(torch.backends.cuda.is_built)
-            except Exception:
-                cuda_built = False
-
-            cuda_available = False
-            try:
-                cuda_available = bool(torch.cuda.is_available())
-            except Exception:
-                cuda_available = False
-
-            if not cuda_built or not cuda_available:
-                logger.warning(
-                    "[RAG] rerank_device=%s 但 CUDA不可用（built=%s available=%s），回退到 cpu",
-                    requested_device,
-                    cuda_built,
-                    cuda_available,
-                )
-                device = "cpu"
-        except Exception as e:
-            logger.warning(
-                "[RAG] 检测 CUDA 是否可用失败：%s，回退到 cpu", str(e)
-            )
-            device = "cpu"
-
-    model_kwargs: dict = {"device": device}
-    if chroma_conf.get("rerank_trust_remote_code"):
-        model_kwargs["trust_remote_code"] = True
-
-    cache_key = f"{model_name!r}|{device}|{model_kwargs.get('trust_remote_code')}"
-    if _cross_encoder_cache and _cross_encoder_cache[0] == cache_key:
-        return _cross_encoder_cache[1]
-
-    cross = HuggingFaceCrossEncoder(model_name=model_name, model_kwargs=model_kwargs)
-    _cross_encoder_cache = (cache_key, cross)
-    return cross
-
-
-def preload_rerank_cross_encoder() -> None:
-    """
-    进程内提前加载 BGE CrossEncoder（与 retrieve_documents 共用缓存）。
-    在 rerank_enabled=true 时由 ReactAgent 初始化调用，避免首次 RAG 才加载导致首问卡顿。
-    """
-    if not bool(chroma_conf.get("rerank_enabled", False)):
-        logger.debug("[RAG] rerank_enabled=false，跳过 BGE CrossEncoder 预加载")
-        return
-    try:
-        t0 = time.perf_counter()
-        get_cached_cross_encoder()
-        logger.info(
-            "[RAG] BGE CrossEncoder 启动预加载完成 wall_s=%.3f",
-            time.perf_counter() - t0,
-        )
-    except Exception as e:
-        logger.warning(
-            "[RAG] BGE CrossEncoder 启动预加载失败，将在首次需要重排时再加载: %s",
-            e,
-        )
+            i = int(idx)
+        except (TypeError, ValueError):
+            continue
+        if i < 0 or i >= n:
+            continue
+        score = item.get("relevance_score")
+        if score is None:
+            continue
+        out.append((expanded_documents[i], float(score)))
+    return out
 
 
 def retrieve_documents(
@@ -383,7 +333,7 @@ def retrieve_documents(
         bm25_retriever: Any | None,
 ) -> list[Document]:
     """
-    端到端检索：粗召回 → 池截断 → 父子块展开（Small-to-Big）→ 可选 CrossEncoder 精排 → 取 top-k；
+    端到端检索：粗召回 → 池截断 → 父子块展开（Small-to-Big）→ 可选百炼 qwen3-rerank 精排 → 取 top-k；
     可按配置因分数阈值拒答（返回空列表）。精排在展开之后，使打分与最终进上下文的正文一致。
     各段耗时：grep [timing] scope=rag_retrieve，用相邻两条 wall= 时间戳对减。
     """
@@ -432,25 +382,25 @@ def retrieve_documents(
         candidate_documents = dedupe_documents(candidate_documents)[:merge_pool_max_size]
     log_timing("rag_retrieve", "recall_and_truncate_done")
 
-    cross_encoder_rerank_enabled = bool(chroma_conf.get("rerank_enabled", False))
+    rerank_enabled = bool(chroma_conf.get("rerank_enabled", False))
 
     if not candidate_documents:
         log_timing(
             "rag_retrieve",
             "summary",
             rewrite_on=query_rewrite_config_enabled,
-            rerank_on=cross_encoder_rerank_enabled,
+            rerank_on=rerank_enabled,
             pool_len=0,
             out_len=0,
         )
         return []
 
-    # --- Small-to-Big：先按 parent_id 展成父块（与最终进上下文的段落一致），再 CrossEncoder 精排 ---
+    # --- Small-to-Big：先按 parent_id 展成父块（与最终进上下文的段落一致），再在线精排 ---
     # 若先对子块 rerank 再换父块，分数与送入 LLM 的正文不对齐；业界常见做法是「最终 passage 上重排」。
     expanded_documents = expand_parent_documents(candidate_documents)
     log_timing("rag_retrieve", "parent_expand_done")
 
-    if not cross_encoder_rerank_enabled:
+    if not rerank_enabled:
         context_documents = expanded_documents[:context_document_count]
         log_timing(
             "rag_retrieve",
@@ -462,26 +412,28 @@ def retrieve_documents(
         )
         return context_documents
 
-    # --- CrossEncoder 精排：对展开后的 passage 做 query–passage 打分，再取 top 或按阈值过滤 ---
+    # --- 百炼 qwen3-rerank：对展开后的 passage 打分，再取 top 或按阈值过滤 ---
+    log_timing("rag_retrieve", "dashscope_rerank_start")
     try:
-        cross_encoder = get_cached_cross_encoder()
-    except ImportError as import_error:
-        raise ImportError(
-            "BGE 精排需: pip install sentence-transformers langchain-classic",
-        ) from import_error
-
-    log_timing("rag_retrieve", "cross_encoder_rerank_start")
-    query_document_pairs = [
-        (normalized_user_query, document.page_content) for document in expanded_documents
-    ]
-    rerank_score_sequence = cross_encoder.score(query_document_pairs)
-    rerank_scores = list(rerank_score_sequence)
-    documents_with_rerank_scores = list(zip(expanded_documents, rerank_scores))
-    documents_sorted_by_rerank_score = sorted(
-        documents_with_rerank_scores,
-        key=lambda document_and_score: document_and_score[1],
-        reverse=True,
-    )
+        documents_sorted_by_rerank_score = _dashscope_rerank_pairs(
+            normalized_user_query,
+            expanded_documents,
+        )
+    except Exception as exc:
+        logger.warning(
+            "[RAG] DashScope rerank 失败，回退为粗排顺序截断: %s",
+            exc,
+        )
+        documents_sorted_by_rerank_score = [
+            (document, 1.0 - index * 1e-9)
+            for index, document in enumerate(expanded_documents)
+        ]
+    if not documents_sorted_by_rerank_score:
+        logger.warning("[RAG] DashScope rerank 返回空结果，回退为粗排顺序截断")
+        documents_sorted_by_rerank_score = [
+            (document, 1.0 - index * 1e-9)
+            for index, document in enumerate(expanded_documents)
+        ]
 
     # 配置 rerank_refuse_min_score：低于阈值的片段丢弃；若全无则拒答（空列表）。
     rerank_refuse_minimum_score = chroma_conf.get("rerank_refuse_min_score")
@@ -511,7 +463,7 @@ def retrieve_documents(
                 best_score,
                 minimum_rerank_score_threshold,
             )
-            log_timing("rag_retrieve", "cross_encoder_rerank_done")
+            log_timing("rag_retrieve", "dashscope_rerank_done")
             log_timing(
                 "rag_retrieve",
                 "summary",
@@ -522,7 +474,7 @@ def retrieve_documents(
             )
             return []
 
-    log_timing("rag_retrieve", "cross_encoder_rerank_done")
+    log_timing("rag_retrieve", "dashscope_rerank_done")
     context_documents = reranked_top_documents
     log_timing(
         "rag_retrieve",
