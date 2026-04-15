@@ -2,7 +2,7 @@ import time
 
 import streamlit as st
 
-from agent.react_agent import ReactAgent
+from agent.checkpoint_react_agent import CheckpointReactAgent, make_checkpoint_thread_id
 from memory.history_store import get_history_store
 from utils.log_utils import set_session_id
 
@@ -11,8 +11,13 @@ st.title("RAW智能助手")
 st.divider()
 
 # 每个浏览器会话独立的 session_state → 对话隔离
+if "_session_tag" not in st.session_state:
+    import uuid
+
+    st.session_state["_session_tag"] = str(uuid.uuid4())
+
 if "agent" not in st.session_state:
-    st.session_state["agent"] = ReactAgent()
+    st.session_state["agent"] = CheckpointReactAgent()
 
 if "chat_messages" not in st.session_state:
     st.session_state["chat_messages"] = []
@@ -48,6 +53,10 @@ with st.sidebar:
     with col2:
         if st.button("清空本轮对话"):
             st.session_state["chat_messages"] = []
+            # 同时重置 checkpoint thread，避免新对话继承旧图状态
+            import uuid
+
+            st.session_state["_session_tag"] = str(uuid.uuid4())
             st.rerun()
 
 # 长期记忆：按 user_id 加载完整历史（切换用户且消息为空时）
@@ -78,10 +87,15 @@ if prompt:
     full_parts: list[str] = []
     with st.spinner("agent思考中..."):
         messages_for_agent = list(st.session_state["chat_messages"])
+        # checkpoint：同一 user_id + session_tag 共享 thread；不同标签页/清空后互不影响
+        tid = make_checkpoint_thread_id(user_id or None, st.session_state.get("_session_tag") or None)
 
         def stream_chars():
             for piece in st.session_state["agent"].execute_stream(
-                    messages_for_agent, user_id=user_id or None
+                    messages_for_agent,
+                    user_id=user_id or None,
+                    thread_id=tid,
+                    session_tag=st.session_state.get("_session_tag") or None,
             ):
                 full_parts.append(piece)
                 for char in piece:

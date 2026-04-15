@@ -20,3 +20,16 @@ reflection_enabled: false
 reflection_min_score: 0.65
 reflection_max_extra_turns: 1
 # reflection_model: 不配则用主模型 chat_model；配了则用该名（可与 rag.yml turbo_chat_model_name 一致）
+
+# -------------------------
+# Checkpoint（LangGraph）
+# -------------------------
+# CheckpointReactAgent 的默认 checkpointer：
+# - memory：进程内（默认）
+# - redis：Redis 持久化（需要依赖 langgraph-checkpoint-redis，并确保 Redis 具备 RedisJSON + RediSearch；Redis 8+ 默认包含）
+checkpoint_saver: memory
+
+# 仅当 checkpoint_saver=redis 时生效，例如：
+# - 本机：redis://localhost:6379/0
+# - 带密码：redis://:password@localhost:6379/0
+checkpoint_redis_url: redis://localhost:6379/0
