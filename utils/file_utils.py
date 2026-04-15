@@ -81,10 +81,51 @@ def _format_pdf_table(table: list[list[Any]]) -> str:
     return "\n".join(lines)
 
 
+def _escape_md_table_cell(text: str) -> str:
+    # Markdown 表格中 `|` 有语义，统一转义/替换；换行也压平
+    return (text or "").replace("|", "\\|").replace("\n", " ").strip()
+
+
+def _format_pdf_table_markdown(table: list[list[Any]]) -> str:
+    """将二维表转为 Markdown 表格（尽量保留可读性）。"""
+    if not table:
+        return ""
+    # 过滤空行
+    rows = [r for r in table if r is not None and any((c or "").strip() for c in r)]
+    if not rows:
+        return ""
+
+    def row_cells(row: list[Any]) -> list[str]:
+        out: list[str] = []
+        for cell in row:
+            out.append(_escape_md_table_cell("" if cell is None else str(cell)))
+        return out
+
+    header = row_cells(rows[0])
+    # 如果只有一行，仍然用它做 header，避免完全无法表示
+    body_rows = [row_cells(r) for r in rows[1:]] if len(rows) > 1 else []
+    col_count = max(1, max(len(header), *(len(r) for r in body_rows)) if body_rows else len(header))
+
+    def pad(row: list[str]) -> list[str]:
+        return row + [""] * (col_count - len(row))
+
+    header = pad(header)
+    body_rows = [pad(r) for r in body_rows]
+    sep = ["---"] * col_count
+
+    lines = [
+        "| " + " | ".join(header) + " |",
+        "| " + " | ".join(sep) + " |",
+    ]
+    for r in body_rows:
+        lines.append("| " + " | ".join(r) + " |")
+    return "\n".join(lines)
+
+
 def pdf_loader(filepath: str, passwd=None) -> list[Document]:
     """
     使用 pdfplumber 读取 PDF：逐页 extract_text(layout=True) + extract_tables()，
-    复杂表格结构化拼入正文后再进入向量切分。加密 PDF 可传 passwd。
+    **先转为 Markdown**（含表格 Markdown table），再进入后续文本切分。加密 PDF 可传 passwd。
     """
     import pdfplumber
 
@@ -95,21 +136,21 @@ def pdf_loader(filepath: str, passwd=None) -> list[Document]:
     documents: list[Document] = []
     with pdfplumber.open(filepath, **open_kw) as pdf:
         for page_index, page in enumerate(pdf.pages):
-            parts: list[str] = []
+            md_parts: list[str] = [f"## Page {page_index + 1}"]
             page_text = page.extract_text(layout=True)
             if page_text and page_text.strip():
-                parts.append(page_text.strip())
+                md_parts.append(page_text.strip())
 
             tables = page.extract_tables() or []
             for table_index, table in enumerate(tables):
                 if not table:
                     continue
-                formatted = _format_pdf_table(table)
+                formatted = _format_pdf_table_markdown(table)
                 if not formatted.strip():
                     continue
-                parts.append(f"[表格 {table_index + 1}]\n{formatted}")
+                md_parts.append(f"### Table {table_index + 1}\n\n{formatted}")
 
-            body = "\n\n".join(parts).strip()
+            body = "\n\n".join(md_parts).strip()
             if not body:
                 continue
 
@@ -119,7 +160,7 @@ def pdf_loader(filepath: str, passwd=None) -> list[Document]:
                     metadata={
                         "source": filepath,
                         "page": page_index + 1,
-                        "loader": "pdfplumber",
+                        "loader": "pdfplumber_markdown",
                     },
                 )
             )
@@ -128,4 +169,9 @@ def pdf_loader(filepath: str, passwd=None) -> list[Document]:
 
 
 def txt_loader(filepath: str) -> list[Document]:
+    return TextLoader(filepath, encoding="utf-8").load()
+
+
+def java_loader(filepath: str) -> list[Document]:
+    # Java 源码按纯文本读入，后续用代码友好 splitter 切分
     return TextLoader(filepath, encoding="utf-8").load()

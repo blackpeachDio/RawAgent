@@ -9,12 +9,18 @@ import uuid
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_text_splitters import Language, MarkdownTextSplitter, RecursiveCharacterTextSplitter
 
 from model.factory import embedding_model
 from rag.parent_store import ParentContentStore
 from utils.config_utils import chroma_conf
-from utils.file_utils import txt_loader, pdf_loader, get_file_md5_hex, listdir_with_allowed_type
+from utils.file_utils import (
+    get_file_md5_hex,
+    java_loader,
+    listdir_with_allowed_type,
+    pdf_loader,
+    txt_loader,
+)
 from utils.log_utils import logger
 from utils.path_utils import resolve_repo_path
 
@@ -78,6 +84,17 @@ class OfflineIndexService:
             separators=chroma_conf["separators"],
             length_function=len,
         )
+        # PDF 已在 loader 中转为 Markdown：用 Markdown splitter 更稳定沿标题/块切分
+        self._markdown_splitter = MarkdownTextSplitter(
+            chunk_size=int(chroma_conf["chunk_size"]),
+            chunk_overlap=int(chroma_conf["chunk_overlap"]),
+        )
+        # Java：代码友好切分（language-specific separators）
+        self._java_splitter = RecursiveCharacterTextSplitter.from_language(
+            language=Language.JAVA,
+            chunk_size=int(chroma_conf["chunk_size"]),
+            chunk_overlap=int(chroma_conf["chunk_overlap"]),
+        )
         self._parent_splitter: RecursiveCharacterTextSplitter | None = None
         self._parent_store: ParentContentStore | None = None
         if self._parent_child:
@@ -133,6 +150,9 @@ class OfflineIndexService:
             if read_path.endswith(".pdf"):
                 return pdf_loader(read_path)
 
+            if read_path.endswith(".java"):
+                return java_loader(read_path)
+
             return []
 
         allowed_files_path: list[str] = listdir_with_allowed_type(
@@ -154,17 +174,25 @@ class OfflineIndexService:
                     logger.warning(f"[加载知识库]{path}内没有有效文本内容，跳过")
                     continue
 
+                # 按文件类型选择切分器
+                if path.endswith(".pdf"):
+                    splitter = self._markdown_splitter
+                elif path.endswith(".java"):
+                    splitter = self._java_splitter
+                else:
+                    splitter = self.spliter
+
                 if self._parent_child and self._parent_splitter is not None and self._parent_store is not None:
                     max_ins = int(chroma_conf.get("parent_insert_max_chars") or 0)
                     split_document = _split_parent_child(
                         documents,
                         self._parent_splitter,
-                        self.spliter,
+                        splitter,  # type: ignore[arg-type]
                         self._parent_store,
                         max_ins,
                     )
                 else:
-                    split_document = self.spliter.split_documents(documents)
+                    split_document = splitter.split_documents(documents)
 
                 if not split_document:
                     logger.warning(f"[加载知识库]{path}分片后没有有效文本内容，跳过")

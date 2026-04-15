@@ -55,8 +55,9 @@ hybrid_bm25_enabled: false
 
 data_path: ../data # 数据文件夹
 md5_hex_store: md5.text # 去重记录
-# PDF 离线索引用 pdfplumber（正文 layout + 表格 extract_tables），见 utils/file_utils.pdf_loader
-allow_knowledge_file_type: [ "txt", "pdf" ]
+# PDF 离线索引用 pdfplumber：先转 Markdown（正文 layout + 表格 extract_tables → Markdown table），见 utils/file_utils.pdf_loader
+# Java 源码：按代码友好 splitter 切分（见 rag/offline_index.py）
+allow_knowledge_file_type: [ "txt", "pdf", "java" ]
 
 chunk_size: 200
 chunk_overlap: 20
