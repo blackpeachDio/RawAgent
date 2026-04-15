@@ -6,24 +6,27 @@ persist_directory: ../chroma_db # RAG 向量库目录
 # 向量粗排从 Chroma 取回的条数；仅当 rerank_enabled 为 true 时生效，应 >= k
 # 过大则 Chroma 与重排都变慢；追求低延迟可先试 8～12
 fetch_k: 12
-# 精排后进入 RAG 上下文的条数（CrossEncoder top_n）
+# 精排后进入 RAG 上下文的条数（百炼 rerank 后再截断到此数量）
 k: 3
-# 是否启用 BGE CrossEncoder 精排（需 sentence-transformers）
+# 是否启用阿里云百炼文本重排序（需 config/api.yml 或环境变量 DASHSCOPE_API_KEY）
 rerank_enabled: true
-# 创建 ReactAgent 时预加载 BGE（避免首次 RAG 才加载）；仅 rerank_enabled=true 时生效
-rerank_preload_on_startup: true
-# 访问 huggingface.co 超时：填镜像（等价于环境变量 HF_ENDPOINT）。国内可试 https://hf-mirror.com
-hf_endpoint: https://hf-mirror.com
-# HuggingFace 模型 id；或已下载到本地的文件夹路径（也可用 ../models/xxx 相对 utils 根）
-rerank_model: ../models/bge-reranker-base
-#rerank_model: BAAI/bge-reranker-base
-
-# cpu 或 cuda / cuda:0
-rerank_device: cpu
-# 个别模型需 trust_remote_code，一般为 false
-rerank_trust_remote_code: false
-# 精排分数（越高越相关，刻度因模型而异）：低于 rerank_refuse_min_score 则拒答（不返回片段）；不填则关闭
-# rerank_refuse_min_score: -20.0
+# 兼容字段：原为本地 CrossEncoder 预加载；在线 rerank 下无操作，可保留 false
+rerank_preload_on_startup: false
+# 百炼 rerank 模型名（与控制台一致）
+rerank_model: qwen3-rerank
+# 可选：覆盖默认 endpoint（新加坡等国际区见百炼文档）
+# rerank_api_url: https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank
+# 是否在响应中带回文档正文（略增流量；部分模型文档未列此项，若报错可改 false）
+rerank_return_documents: true
+# 单次 HTTP 超时（秒）
+rerank_timeout_seconds: 60
+# 可选：排序指令（英文），不配则用百炼默认 Q&A 检索策略
+# rerank_instruct: "Given a web search query, retrieve relevant passages that answer the query."
+# 精排分数（越高越相关）。qwen3-rerank 的 relevance_score 约为 0~1，阈值请按业务重调。
+# - 配置 rerank_refuse_min_score 后，会剔除所有 rerank 分数 < 阈值的片段；
+# - 若剔除后没有任何片段通过阈值，则本轮 RAG 拒答（不返回片段）。
+# 不填则关闭阈值过滤/拒答逻辑。
+# rerank_refuse_min_score: 0.35
 
 # 检索用查询向量 LRU（重复/改写命中相同子串时跳过 DashScope）；0=关闭
 query_embedding_cache_max_entries: 2048
@@ -41,14 +44,18 @@ query_rewrite_temperature: 0
 query_rewrite_stream: true
 # 改写结果 LRU 条数；0 表示关闭缓存（同句重复问命中则跳 LLM）
 query_rewrite_cache_max_entries: 512
-# 合并去重后参与 BGE 打分的最大条数
+# 合并去重后参与精排打分的最大条数（百炼单次最多 500 条）
 merge_max_pool: 60
 
-# --- 混合检索：BM25 与向量结果合并去重后再精排（全库建 BM25，首次略慢）---
+# --- 混合检索：BM25 与多查询向量经 EnsembleRetriever RRF 融合后再精排（全库建 BM25，首次略慢）---
 hybrid_bm25_enabled: false
+# 两路权重；不配则 LangChain 默认各 0.5。只配一侧时另一侧按 0.5 补全
+# ensemble_vector_weight: 0.5
+# ensemble_bm25_weight: 0.5
 
 data_path: ../data # 数据文件夹
 md5_hex_store: md5.text # 去重记录
+# PDF 离线索引用 pdfplumber（正文 layout + 表格 extract_tables），见 utils/file_utils.pdf_loader
 allow_knowledge_file_type: [ "txt", "pdf" ]
 
 chunk_size: 200

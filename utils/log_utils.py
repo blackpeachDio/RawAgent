@@ -88,6 +88,20 @@ def get_logger(
 # 快捷获取日志器
 logger = get_logger()
 
+
+def log_timing(scope: str, step: str, **details) -> None:
+    """
+    仅记录墙钟时间戳（wall），便于在日志里对相邻两条做差得到各段耗时。
+    不使用 ContextVar / trace_id；scope 表示模块或场景，step 表示子阶段。
+    """
+    wall = datetime.now().isoformat(timespec="milliseconds")
+    if details:
+        extra = " ".join(f"{key}={value!r}" for key, value in details.items())
+        logger.info("[timing] scope=%s step=%s wall=%s %s", scope, step, wall, extra)
+    else:
+        logger.info("[timing] scope=%s step=%s wall=%s", scope, step, wall)
+
+
 if __name__ == '__main__':
     logger.info("信息日志")
     logger.error("错误日志")

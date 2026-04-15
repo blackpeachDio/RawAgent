@@ -99,8 +99,13 @@ def main() -> None:
     for it in items:
         print(f"[{it.id}] 运行 Agent: {it.question[:50]}...")
         messages = [{"role": "user", "content": it.question}]
-        agent_answer = "".join(agent.execute_stream(messages))
-        agent_answer = agent_answer.strip()
+        parts: list[str] = []
+        for p in agent.execute_stream(messages):
+            parts.append(p)
+        agent_answer = (
+            (getattr(agent, "last_turn_display_assistant_text", "") or "").strip()
+            or "".join(parts).strip()
+        )
 
         print(f"[{it.id}] Agent 回答长度: {len(agent_answer)} 字符")
         score, reason = llm_answer_score(

@@ -3,15 +3,12 @@ from __future__ import annotations
 
 import json
 import re
-import time
-
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from model.factory import chat_model, make_turbo_chat_model
 from utils.config_utils import agent_conf, rag_conf
-from utils.latency_trace import trace_id_or_dash
-from utils.log_utils import logger
+from utils.log_utils import log_timing, logger
 from utils.prompt_utils import load_reflect_critique_prompts
 
 _PLACEHOLDER_Q = "<<<USER_QUESTION>>>"
@@ -86,13 +83,9 @@ def reflect_critique_score(user_question: str, draft_answer: str) -> tuple[float
     )
     try:
         llm = _get_reflection_llm()
-        t0 = time.perf_counter()
+        log_timing("reflection_critique", "llm_start")
         out = llm.invoke([HumanMessage(content=body)])
-        logger.info(
-            "[latency] trace=%s phase=reflection_critique_llm wall_s=%.4f",
-            trace_id_or_dash(),
-            time.perf_counter() - t0,
-        )
+        log_timing("reflection_critique", "llm_done")
         content = _normalize_llm_text(getattr(out, "content", out))
         parsed = _parse_critique_json(content)
         if parsed is None:

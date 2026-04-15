@@ -68,7 +68,7 @@ class ParentContentStore:
 
 
 def get_parent_store() -> ParentContentStore | None:
-    """配置了 parent_child_map_path 时返回单例；否则为 None（展开时仅用 metadata 中的 parent_content）。"""
+    """配置了 parent_child_map_path 时返回单例；否则为 None（有 parent_id 也无法查父块，展开时保留子块）。"""
     global _store
     raw = chroma_conf.get("parent_child_map_path")
     if not raw or not str(raw).strip():
