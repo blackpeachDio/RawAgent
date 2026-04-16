@@ -56,7 +56,7 @@ hybrid_bm25_enabled: false
 data_path: ../data # 数据文件夹
 md5_hex_store: md5.text # 去重记录
 # PDF 离线索引用 pdfplumber：先转 Markdown（正文 layout + 表格 extract_tables → Markdown table），
-# 跨页续表会复用上一页表头；超大 PDF 可调 pdf_max_pages（0=不限制）、pdf_log_progress_every 打进度。
+# 正文排除表格 bbox 避免与 Markdown 表重复；表头补全仅同页。超大 PDF：pdf_max_pages、pdf_log_progress_every。
 # 见 utils/file_utils.pdf_loader、rag/pdf_markdown_splitter（表感知切分）
 pdf_max_pages: 0
 pdf_log_progress_every: 25

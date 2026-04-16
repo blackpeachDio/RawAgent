@@ -162,6 +162,83 @@ def _pad_row_to(row: list[str], n: int) -> list[str]:
     return row + [""] * (n - len(row))
 
 
+def _word_center_in_any_table_bbox(word: dict[str, Any], bboxes: list[tuple[Any, ...]]) -> bool:
+    """判断单词中心是否落在任一表格区域内（与 find_tables 的 bbox 对齐）。"""
+    try:
+        x0w = float(word["x0"])
+        x1w = float(word["x1"])
+        topw = float(word["top"])
+        botw = float(word.get("bottom", word["top"]))
+    except (KeyError, TypeError, ValueError):
+        return False
+    cx = (x0w + x1w) / 2.0
+    cy = (topw + botw) / 2.0
+    for box in bboxes:
+        if len(box) < 4:
+            continue
+        bx0, btop, bx1, bbot = (float(box[0]), float(box[1]), float(box[2]), float(box[3]))
+        if bx0 <= cx <= bx1 and btop <= cy <= bbot:
+            return True
+    return False
+
+
+def _pdf_join_words_to_lines(words: list[dict[str, Any]]) -> str:
+    """按行位置粗略拼回正文（用于表格外文本，避免与 Markdown 表重复）。"""
+    if not words:
+        return ""
+    tol = 3.0
+    sorted_w = sorted(
+        words,
+        key=lambda w: (round(float(w.get("top", 0)), 1), float(w.get("x0", 0))),
+    )
+    lines: list[list[str]] = []
+    cur_top: float | None = None
+    cur: list[str] = []
+    for w in sorted_w:
+        t = float(w.get("top", 0))
+        txt = str(w.get("text", "")).strip()
+        if not txt:
+            continue
+        if cur_top is None or abs(t - cur_top) <= tol:
+            cur.append(txt)
+            if cur_top is None:
+                cur_top = t
+        else:
+            if cur:
+                lines.append(cur)
+            cur = [txt]
+            cur_top = t
+    if cur:
+        lines.append(cur)
+    return "\n".join(" ".join(line) for line in lines)
+
+
+def _pdf_page_text_outside_tables(page: Any) -> str:
+    """
+    页面正文：排除 find_tables 检测到的表格 bbox 内文字，仅保留「表格外」流式文本。
+    与 extract_tables → Markdown 并存时，可避免同一表格在 layout 文本里再出现一遍（索引重复）。
+    """
+    try:
+        found = page.find_tables() or []
+    except Exception as e:
+        logger.warning("[pdf_loader] find_tables 失败，退回全文 extract_text | %s", e)
+        found = []
+    bboxes = [t.bbox for t in found if getattr(t, "bbox", None)]
+    if not bboxes:
+        raw = page.extract_text(layout=True)
+        return (raw or "").strip()
+
+    try:
+        words = page.extract_words(use_text_flow=True, keep_blank_chars=False) or []
+    except Exception as e:
+        logger.warning("[pdf_loader] extract_words 失败，退回 extract_text | %s", e)
+        raw = page.extract_text(layout=True)
+        return (raw or "").strip()
+
+    kept = [w for w in words if not _word_center_in_any_table_bbox(w, bboxes)]
+    return _pdf_join_words_to_lines(kept).strip()
+
+
 def _format_pdf_table_markdown(table: list[list[Any]]) -> str:
     """将二维表转为 Markdown 表格（尽量保留可读性）。"""
     if not table:
@@ -180,7 +257,8 @@ def _pdf_logical_header_body(
         last_col_count: int,
 ) -> tuple[list[str], list[list[str]], list[str] | None, int]:
     """
-    跨页表合并/补头：在列数一致时识别「重复表头」「续表数据」「新表（不同表头）」。
+    同页内多段表合并/补头：列数一致时识别「重复表头」「续表数据」「新表（不同表头）」。
+    跨页状态在 pdf_loader 中按页重置，避免分页后 ncol 相同却误用上一页表头。
     返回 (header_cells, body_rows, new_last_header, new_last_col_count)。
     """
     ncol = max((len(r) for r in rows), default=0)
@@ -210,8 +288,8 @@ def pdf_loader(
         log_progress_every: int = 25,
 ) -> list[Document]:
     """
-    使用 pdfplumber 读取 PDF：逐页 extract_text(layout=True) + extract_tables()，
-    先转为 Markdown（含表格）；**跨页续表**时复用上一页的表头行，避免第二页缺列名。
+    使用 pdfplumber 读取 PDF：正文为 **表格外** 文本（find_tables bbox 外）+ extract_tables() 转 Markdown，
+    避免 layout 全文与表格单元格重复索引；表头补全仅在 **同一页内** 多段解析时生效。
 
     性能：大文件逐页 ``flush_cache``、可选 ``max_pages`` 上限、周期性进度日志。
     """
@@ -222,13 +300,15 @@ def pdf_loader(
         open_kw["password"] = passwd
 
     documents: list[Document] = []
-    last_header: list[str] | None = None
-    last_col_count = 0
     table_seq = 0
 
     with pdfplumber.open(filepath, **open_kw) as pdf:
         total_pages = len(pdf.pages)
         for page_index, page in enumerate(pdf.pages):
+            # 每页独立：跨页不复用表头，避免 ncol 相同的新表误接上一页列名
+            last_header: list[str] | None = None
+            last_col_count = 0
+
             if max_pages > 0 and page_index >= max_pages:
                 logger.warning(
                     "[pdf_loader] 已达 max_pages=%s，提前结束 | pages=%s | %s",
@@ -247,9 +327,9 @@ def pdf_loader(
                 )
 
             md_parts: list[str] = [f"## Page {page_index + 1}"]
-            page_text = page.extract_text(layout=True)
-            if page_text and page_text.strip():
-                md_parts.append(page_text.strip())
+            page_text = _pdf_page_text_outside_tables(page)
+            if page_text:
+                md_parts.append(page_text)
 
             tables = page.extract_tables() or []
             for table in tables:
