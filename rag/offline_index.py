@@ -9,10 +9,11 @@ import uuid
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
-from langchain_text_splitters import Language, MarkdownTextSplitter, RecursiveCharacterTextSplitter
+from langchain_text_splitters import Language, RecursiveCharacterTextSplitter
 
 from model.factory import embedding_model
 from rag.parent_store import ParentContentStore
+from rag.pdf_markdown_splitter import TableAwareMarkdownTextSplitter
 from utils.config_utils import chroma_conf
 from utils.file_utils import (
     get_file_md5_hex,
@@ -84,8 +85,8 @@ class OfflineIndexService:
             separators=chroma_conf["separators"],
             length_function=len,
         )
-        # PDF 已在 loader 中转为 Markdown：用 Markdown splitter 更稳定沿标题/块切分
-        self._markdown_splitter = MarkdownTextSplitter(
+        # PDF：Markdown 标题级切分 + 管道表按行切并在每片重复表头（见 rag/pdf_markdown_splitter）
+        self._markdown_splitter = TableAwareMarkdownTextSplitter(
             chunk_size=int(chroma_conf["chunk_size"]),
             chunk_overlap=int(chroma_conf["chunk_overlap"]),
         )
@@ -148,7 +149,11 @@ class OfflineIndexService:
                 return txt_loader(read_path)
 
             if read_path.endswith(".pdf"):
-                return pdf_loader(read_path)
+                return pdf_loader(
+                    read_path,
+                    max_pages=int(chroma_conf.get("pdf_max_pages") or 0),
+                    log_progress_every=int(chroma_conf.get("pdf_log_progress_every") or 25),
+                )
 
             if read_path.endswith(".java"):
                 return java_loader(read_path)
