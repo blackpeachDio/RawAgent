@@ -1,5 +1,5 @@
 """
-离线索引：从 data 目录读取文档，切分、向量化并写入 Chroma（含 MD5 去重）。
+离线索引：从 data 目录读取文档，切分、向量化并写入向量库（Chroma/Milvus 按配置切换，含 MD5 去重）。
 
 支持父子块：先按父块大小切分，再在每个父块内按子块（chunk_size）切分；
 仅子块写入向量库；父块正文写入 SQLite 映射表（见 rag/parent_store），metadata 只带 parent_id。
@@ -7,13 +7,13 @@
 import os
 import uuid
 
-from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_text_splitters import Language, RecursiveCharacterTextSplitter
 
 from model.factory import embedding_model
 from rag.parent_store import ParentContentStore
 from rag.pdf_markdown_splitter import TableAwareMarkdownTextSplitter
+from rag.vector_backend import make_rag_vector_backend
 from utils.config_utils import chroma_conf
 from utils.file_utils import (
     get_file_md5_hex,
@@ -72,10 +72,9 @@ class OfflineIndexService:
 
     def __init__(self):
         persist_dir = resolve_repo_path(chroma_conf["persist_directory"])
-        logger.info("[离线索引] Chroma persist_directory=%s", persist_dir)
-        self.vector_store = Chroma(
+        self.backend = make_rag_vector_backend(
+            embedding_model,
             collection_name=chroma_conf["collection_name"],
-            embedding_function=embedding_model,
             persist_directory=persist_dir,
         )
         self._parent_child = bool(chroma_conf.get("parent_child_enabled", False))
@@ -203,7 +202,7 @@ class OfflineIndexService:
                     logger.warning(f"[加载知识库]{path}分片后没有有效文本内容，跳过")
                     continue
 
-                self.vector_store.add_documents(split_document)
+                self.backend.add_documents(split_document)
 
                 save_md5_hex(md5_hex)
 
