@@ -3,9 +3,14 @@
 
 支持父子块：先按父块大小切分，再在每个父块内按子块（chunk_size）切分；
 仅子块写入向量库；父块正文写入 SQLite 映射表（见 rag/parent_store），metadata 只带 parent_id。
+
+父子块开启时父切分按后缀区分：txt 用递归分隔符；pdf/md 用表感知 Markdown；java 用 Java 语言切分。
 """
+from __future__ import annotations
+
 import os
 import uuid
+from typing import Any
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
@@ -19,6 +24,7 @@ from utils.file_utils import (
     get_file_md5_hex,
     java_loader,
     listdir_with_allowed_type,
+    md_loader,
     pdf_loader,
     txt_loader,
 )
@@ -28,8 +34,8 @@ from utils.path_utils import resolve_repo_path
 
 def _split_parent_child(
         documents: list[Document],
-        parent_splitter: RecursiveCharacterTextSplitter,
-        child_splitter: RecursiveCharacterTextSplitter,
+        parent_splitter: Any,
+        child_splitter: Any,
         store: ParentContentStore,
         max_insert_chars: int,
 ) -> list[Document]:
@@ -96,7 +102,9 @@ class OfflineIndexService:
             chunk_size=int(chroma_conf["chunk_size"]),
             chunk_overlap=int(chroma_conf["chunk_overlap"]),
         )
-        self._parent_splitter: RecursiveCharacterTextSplitter | None = None
+        self._parent_splitter_txt: Any | None = None
+        self._parent_splitter_markdown: Any | None = None
+        self._parent_splitter_java: Any | None = None
         self._parent_store: ParentContentStore | None = None
         if self._parent_child:
             map_path = (chroma_conf.get("parent_child_map_path") or "").strip()
@@ -105,20 +113,43 @@ class OfflineIndexService:
                     "parent_child_enabled=true 时必须配置 parent_child_map_path（父块映射表 SQLite 路径）"
                 )
             self._parent_store = ParentContentStore(resolve_repo_path(map_path))
-            self._parent_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=int(chroma_conf.get("parent_chunk_size", 1200)),
-                chunk_overlap=int(chroma_conf.get("parent_chunk_overlap", 100)),
+            pcs = int(chroma_conf.get("parent_chunk_size", 1200))
+            pco = int(chroma_conf.get("parent_chunk_overlap", 100))
+            # 父块：按类型与「子块」对齐，避免全文统一递归切导致 md/java 语义边界错位
+            self._parent_splitter_txt = RecursiveCharacterTextSplitter(
+                chunk_size=pcs,
+                chunk_overlap=pco,
                 separators=chroma_conf["separators"],
                 length_function=len,
             )
+            self._parent_splitter_markdown = TableAwareMarkdownTextSplitter(
+                chunk_size=pcs,
+                chunk_overlap=pco,
+            )
+            self._parent_splitter_java = RecursiveCharacterTextSplitter.from_language(
+                language=Language.JAVA,
+                chunk_size=pcs,
+                chunk_overlap=pco,
+            )
             logger.info(
-                "[离线索引] 父子块已启用：父块=%s/%s 子块=%s/%s | map=%s",
+                "[离线索引] 父子块已启用：父块=%s/%s（txt·递归 / pdf·md·表感知Markdown / java·语言） 子块=%s/%s | map=%s",
                 chroma_conf.get("parent_chunk_size"),
                 chroma_conf.get("parent_chunk_overlap"),
                 chroma_conf.get("chunk_size"),
                 chroma_conf.get("chunk_overlap"),
                 resolve_repo_path(map_path),
             )
+
+    def _parent_splitter_for_path(self, path: str) -> Any:
+        """父子块父切分器：与文件类型一致。"""
+        if self._parent_splitter_txt is None:
+            raise RuntimeError("parent splitters not initialized")
+        lower = path.replace("\\", "/").lower()
+        if lower.endswith(".pdf") or lower.endswith(".md"):
+            return self._parent_splitter_markdown
+        if lower.endswith(".java"):
+            return self._parent_splitter_java
+        return self._parent_splitter_txt
 
     def load_document(self):
         """
@@ -155,6 +186,9 @@ class OfflineIndexService:
                     log_progress_every=int(chroma_conf.get("pdf_log_progress_every") or 25),
                 )
 
+            if read_path.endswith(".md"):
+                return md_loader(read_path)
+
             if read_path.endswith(".java"):
                 return java_loader(read_path)
 
@@ -180,19 +214,19 @@ class OfflineIndexService:
                     continue
 
                 # 按文件类型选择切分器
-                if path.endswith(".pdf"):
+                if path.endswith(".pdf") or path.endswith(".md"):
                     splitter = self._markdown_splitter
                 elif path.endswith(".java"):
                     splitter = self._java_splitter
                 else:
                     splitter = self.spliter
 
-                if self._parent_child and self._parent_splitter is not None and self._parent_store is not None:
+                if self._parent_child and self._parent_store is not None:
                     max_ins = int(chroma_conf.get("parent_insert_max_chars") or 0)
                     split_document = _split_parent_child(
                         documents,
-                        self._parent_splitter,
-                        splitter,  # type: ignore[arg-type]
+                        self._parent_splitter_for_path(path),
+                        splitter,
                         self._parent_store,
                         max_ins,
                     )

@@ -12,7 +12,7 @@ description: >-
 ## 范围
 
 - **Agent**：`agent/react_agent.py`、`agent/react_graph_build.py`；图由 `compile_react_agent` 统一构建；内建工具在根包 **`tools/`**（勿使用已删除的 `agent.tools`）。
-- **RAG**：`rag/`（`retrieval_pipeline`、`online_query`）；嵌入模型名见 `config/rag.yml`。
+- **RAG**：`rag/`（`retrieval_pipeline`、`online_query`）；嵌入模型名见 `config/rag.yml`；离线索引支持 `txt` / `pdf` / `md` / `java`（见 `config/chroma.yml` 的 `allow_knowledge_file_type`，`md` 与 `pdf` 共用 Markdown 表感知切分）。
 - **配置**：`utils/config_utils.py` 合并 `agent.yml`+`memory.yml`、`chroma.yml`+`chroma_memory.yml`；密钥优先环境变量 `DASHSCOPE_API_KEY`。
 - **路径**：用 `utils.path_utils` 的 `get_repo_root`、`resolve_repo_path`、`get_config_path`；不要用已废弃的「相对 utils 的随意拼接」。
 - **自检**：`python scripts/verify_paths.py`（轻量）；完整配置键用 `python scripts/verify_config.py`（需依赖与 `api.yml`/密钥）。

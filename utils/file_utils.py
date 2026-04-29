@@ -380,6 +380,16 @@ def txt_loader(filepath: str) -> list[Document]:
     return TextLoader(filepath, encoding="utf-8").load()
 
 
+def md_loader(filepath: str) -> list[Document]:
+    """Markdown 知识库文件：UTF-8 读入；切分由离线索引侧 TableAwareMarkdownTextSplitter 完成。"""
+    docs = TextLoader(filepath, encoding="utf-8").load()
+    for doc in docs:
+        meta = dict(doc.metadata or {})
+        meta.setdefault("loader", "markdown")
+        doc.metadata = meta
+    return docs
+
+
 def java_loader(filepath: str) -> list[Document]:
     # Java 源码按纯文本读入，后续用代码友好 splitter 切分
     return TextLoader(filepath, encoding="utf-8").load()

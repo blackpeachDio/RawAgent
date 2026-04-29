@@ -61,13 +61,15 @@ md5_hex_store: md5.text # 去重记录
 pdf_max_pages: 0
 pdf_log_progress_every: 25
 # Java 源码：按代码友好 splitter 切分（见 rag/offline_index.py）
-allow_knowledge_file_type: [ "txt", "pdf", "java" ]
+# Markdown：rag/pdf_markdown_splitter.TableAwareMarkdownTextSplitter（标题 + 表感知）
+allow_knowledge_file_type: [ "txt", "pdf", "md", "java" ]
 
 chunk_size: 200
 chunk_overlap: 20
 separators: [ "\n\n", "\n", ".", "!", "?", "。", "！", "？", " ", "" ]
 
 # --- 父子块（Small-to-Big）：子块进向量库；父块正文存 SQLite 映射表，不塞进 Chroma metadata ---
+# 父块切分按后缀：txt=递归分隔符；pdf/md=表感知 Markdown；java=Java 语言切分（见 rag/offline_index）
 # 开启后需重新跑离线索引；需配置 parent_child_map_path
 parent_child_enabled: false
 parent_chunk_size: 1200
