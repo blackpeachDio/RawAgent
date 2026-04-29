@@ -2,28 +2,29 @@
 RAG 检索管线：可选查询改写、可选 BM25 与向量 Ensemble（加权 RRF）、合并去重、
 百炼 qwen3-rerank 在线精排（DashScope）、可选分数拒答。
 配置见 config/chroma.yml。
+
+向量库通过 ``rag.vector_backend.VectorStoreBackend`` 抽象访问，默认 Chroma；
+切换 Milvus 只需在 ``config/chroma.yml`` 把 ``vector_backend`` 设为 ``milvus``。
 """
 from __future__ import annotations
 
 import asyncio  # 用于 asyncio.run(ensemble.ainvoke) 并行跑向量+BM25 两路子检索器
 import hashlib
 import time
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from langchain_classic.retrievers.ensemble import EnsembleRetriever
 from langchain_core.callbacks import CallbackManagerForRetrieverRun  # 检索器回调类型（LangChain 要求签名）
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever  # 自定义「向量多句」检索器需继承它
-from pydantic import ConfigDict  # 允许 vector_store 等非标准字段放进 Pydantic 模型
+from pydantic import ConfigDict  # 允许 backend 等非标准字段放进 Pydantic 模型
 from rag.dashscope_rerank import DEFAULT_RERANK_URL, dashscope_text_rerank
 from rag.parent_store import get_parent_store
 from rag.query_embedding_cache import embed_queries_for_retrieval
 from rag.query_rewrite import rewrite_queries_cached
+from rag.vector_backend import VectorStoreBackend
 from utils.config_utils import api_conf, chroma_conf
 from utils.log_utils import log_timing, logger
-
-if TYPE_CHECKING:
-    from langchain_chroma import Chroma
 
 def _doc_key(d: Document) -> str:
     src = (d.metadata or {}).get("source") or ""
@@ -67,13 +68,13 @@ def dedupe_preserve_order_cap(documents: list[Document], cap: int) -> list[Docum
     return out
 
 
-class _FixedQueriesChromaRetriever(BaseRetriever):
-    """对固定查询列表做 Chroma 批量向量召回；invoke 传入的 query 可忽略（Ensemble 仍传用户原句）。"""
+class _FixedQueriesBackendRetriever(BaseRetriever):
+    """对固定查询列表做向量批量召回；invoke 传入的 query 可忽略（Ensemble 仍传用户原句）。"""
 
-    # Chroma 客户端不是 Pydantic 标准类型，必须允许任意类型字段
+    # Backend 不是 Pydantic 标准类型，必须允许任意类型字段
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    vector_store: Any  # 已连好的 Chroma 向量库实例
+    backend: Any  # VectorStoreBackend 实例；用 Any 避免 Pydantic 递归校验抽象类
     queries: list[str]  # 已算好的检索句列表（含原问 + 改写句）
     fetch_k: int  # 每句从向量库取几条候选
 
@@ -84,7 +85,7 @@ class _FixedQueriesChromaRetriever(BaseRetriever):
             run_manager: CallbackManagerForRetrieverRun,
     ) -> list[Document]:
         # LangChain 会传入 query，但这里故意只用 self.queries（改写结果在进 Ensemble 前就定好了）
-        return _vector_search_chroma_batch(self.vector_store, self.queries, self.fetch_k)
+        return _vector_search_batch(self.backend, self.queries, self.fetch_k)
 
 
 def _invoke_ensemble_hybrid(ensemble: Any, query: str) -> list[Document]:
@@ -107,7 +108,7 @@ def _invoke_ensemble_hybrid(ensemble: Any, query: str) -> list[Document]:
 
 
 def _build_hybrid_ensemble_retriever(
-        multi_query_vector_retriever: _FixedQueriesChromaRetriever,
+        multi_query_vector_retriever: _FixedQueriesBackendRetriever,
         bm25_retriever: Any,
 ) -> Any:
     """向量多句一路 + BM25 一路；可选 chroma 两路权重，不配则 Ensemble 默认等权 RRF。"""
@@ -125,7 +126,7 @@ def _build_hybrid_ensemble_retriever(
 
 
 def _recall_candidate_documents(
-        multi_query_vector_retriever: _FixedQueriesChromaRetriever,
+        multi_query_vector_retriever: _FixedQueriesBackendRetriever,
         normalized_user_query: str,
         bm25_retriever: Any | None,
         hybrid_bm25_config_enabled: bool,
@@ -196,59 +197,42 @@ def expand_parent_documents(documents: list[Document]) -> list[Document]:
     return out
 
 
-def _chroma_query_result_to_documents(raw: dict[str, Any]) -> list[Document]:
-    """解析 Chroma `collection.query` 多路结果（documents/metadatas 为「每路一条」的嵌套列表）。"""
-    out: list[Document] = []
-    docs_batch = raw.get("documents") or []
-    metas_batch = raw.get("metadatas") or []
-    for qi in range(len(docs_batch)):
-        doc_row = docs_batch[qi] or []
-        meta_row = metas_batch[qi] if qi < len(metas_batch) else []
-        for j, content in enumerate(doc_row):
-            if content is None:
-                continue
-            md = meta_row[j] if j < len(meta_row) else {}
-            out.append(Document(page_content=str(content), metadata=dict(md or {})))
-    return out
-
-
-def _vector_search_chroma_batch(
-        vector_store: Chroma,
+def _vector_search_batch(
+        backend: VectorStoreBackend,
         queries: list[str],
         fetch_k: int,
 ) -> list[Document]:
     """
-    向量召回：统一走 collection.query + 检索侧向量缓存。
+    向量召回：走后端 ``search_by_vectors`` + 检索侧向量缓存。
     DashScope 使用 text_type=query 批量嵌入（避免误用 document 类型）；重复问句命中 LRU 则跳过远程。
+    任何后端错误都回退到后端自带的 ``similarity_search``，保证召回不中断。
     """
     if not queries:
         return []
-    emb = getattr(vector_store, "_embedding_function", None)
+    emb = backend.embedding
     if emb is None:
         raise ValueError(
-            "向量检索必须配置 embedding_function（见 rag/online_query 等）。"
+            "向量检索必须配置 embedding（见 rag/online_query 等）。"
         )
     try:
-        col = vector_store._collection  # noqa: SLF001
         vecs = embed_queries_for_retrieval(emb, queries)
-        raw = col.query(query_embeddings=vecs, n_results=fetch_k)
-        return _chroma_query_result_to_documents(raw)
+        return backend.search_by_vectors(vecs, n_results=fetch_k)
     except Exception as e:
-        logger.warning("[RAG] Chroma query 失败，回退 similarity_search: %s", e)
+        logger.warning("[RAG] 向量后端批量召回失败，回退 similarity_search: %s", e)
         pool: list[Document] = []
         for q in queries:
-            pool.extend(vector_store.similarity_search(q, k=fetch_k))
+            pool.extend(backend.similarity_search(q, k=fetch_k))
         return pool
 
 
-def warmup_vector_retrieval(vector_store: Chroma, *, sample_query: str = " ") -> None:
-    """预热 Chroma + 查询嵌入链路（DashScope 仍会有一次网络；后续同会话命中缓存）。"""
+def warmup_vector_retrieval(backend: VectorStoreBackend, *, sample_query: str = " ") -> None:
+    """预热向量后端 + 查询嵌入链路（DashScope 仍会有一次网络；后续同会话命中缓存）。"""
     if not bool(chroma_conf.get("recall_warmup_on_startup", False)):
         return
     t0 = time.perf_counter()
     try:
         q = (sample_query or " ").strip() or " "
-        _vector_search_chroma_batch(vector_store, [q], 1)
+        _vector_search_batch(backend, [q], 1)
         logger.info("[RAG] 向量召回预热完成 wall_s=%.4f", time.perf_counter() - t0)
     except Exception as e:
         logger.warning("[RAG] 向量召回预热失败: %s", e)
@@ -260,20 +244,14 @@ def rewrite_queries_for_retrieval(user_query: str) -> list[str]:
     return rewrite_queries_cached(user_query, max_v)
 
 
-def build_bm25_retriever(vector_store: Chroma):
+def build_bm25_retriever(backend: VectorStoreBackend):
     from langchain_community.retrievers import BM25Retriever
 
-    col = vector_store._collection  # noqa: SLF001
-    batch = col.get(include=["documents", "metadatas"])
-    docs_raw = batch.get("documents") or []
-    metas = batch.get("metadatas") or [{} for _ in docs_raw]
-    if not docs_raw:
+    max_docs = int(chroma_conf.get("bm25_dump_max_docs", 100_000))
+    docs = backend.dump_all(max_docs=max_docs)
+    if not docs:
         logger.warning("[RAG] BM25：向量库无文本，跳过混合检索")
         return None
-    docs = [
-        Document(page_content=str(t), metadata=m or {})
-        for t, m in zip(docs_raw, metas)
-    ]
     fk = int(chroma_conf.get("fetch_k", 20))
     return BM25Retriever.from_documents(docs, k=fk)
 
@@ -327,7 +305,7 @@ def _dashscope_rerank_pairs(
 
 
 def retrieve_documents(
-        vector_store: Chroma,
+        backend: VectorStoreBackend,
         query: str,
         *,
         bm25_retriever: Any | None,
@@ -360,8 +338,8 @@ def retrieve_documents(
         retrieval_query_texts = [query.strip()]
     log_timing("rag_retrieve", "retrieval_queries_ready")
 
-    multi_query_vector_retriever = _FixedQueriesChromaRetriever(
-        vector_store=vector_store,
+    multi_query_vector_retriever = _FixedQueriesBackendRetriever(
+        backend=backend,
         queries=retrieval_query_texts,
         fetch_k=vector_fetch_count,
     )
