@@ -112,13 +112,18 @@ def log_wrap_model_tokens(
     request: ModelRequest,
     handler: Callable[[ModelRequest], ModelResponse],
 ) -> ModelResponse:
-    """在真正调模型前可选估算 token；大 tools schema 时估算很慢，见 agent.yml。"""
+    """在真正调模型前可选估算 token（DashScope Qwen tokenizer）；大 tools schema 时估算较慢，见 agent.yml。"""
     if bool(agent_conf.get("agent_llm_token_estimate_enabled", True)):
         try:
-            n_in = count_agent_llm_input_tokens_from_model_request(request)
+            breakdown = count_agent_llm_input_tokens_from_model_request(request)
             logger.info(
-                "[agent_llm] 输入 token 估算（含 system、messages、tools 等，cl100k_base 近似，供成本参考）: %d",
-                n_in,
+                "[agent_llm] 输入 token 估算（DashScope Qwen tokenizer）"
+                " total=%d | system=%d, messages=%d, tools=%d, extras=%d",
+                breakdown["total"],
+                breakdown["system"],
+                breakdown["messages"],
+                breakdown["tools"],
+                breakdown["extras"],
             )
         except Exception as e:
             logger.warning("[agent_llm] token 估算失败: %s", e)

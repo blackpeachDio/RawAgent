@@ -20,14 +20,17 @@
 """
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
+
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.redis import RedisSaver
 from langgraph.errors import GraphRecursionError
 
-from agent.react_graph_build import compile_react_agent
 from agent.react_agent import _inject_memory_context
-from rag.warmup import maybe_preload_rerank_cross_encoder
+from agent.react_graph_build import compile_react_agent
 from memory.memory_queue import enqueue_memory_job
+from rag.warmup import maybe_preload_rerank_cross_encoder
 from utils.agent_stream_display import (
     assistant_final_display_text,
     assistant_stream_visible_text,
@@ -53,12 +56,53 @@ class CheckpointReactAgent:
     """compile_react_agent + checkpointer；stream 时传入 thread_id。"""
 
     def __init__(self, checkpointer=None):
-        self.checkpointer = checkpointer or MemorySaver()
+        self._checkpointer_cm: AbstractContextManager | None = None
+        self.checkpointer = checkpointer or self._make_default_checkpointer()
         self.agent = compile_react_agent(checkpointer=self.checkpointer)
         self._max_messages = int(agent_conf.get("conversation_max_messages", 40))
         self._recursion_limit = int(agent_conf.get("agent_recursion_limit", 40))
 
         maybe_preload_rerank_cross_encoder()
+
+    def _make_default_checkpointer(self):
+        """
+        默认 checkpointer：
+        - memory：进程内（默认，零依赖）
+        - redis：基于 Redis 的持久化 checkpoint（需要安装 langgraph-checkpoint-redis，并配置 redis 连接串）
+        """
+        saver = (agent_conf.get("checkpoint_saver") or "memory").strip().lower()
+        if saver != "redis":
+            return MemorySaver()
+
+        redis_url = (agent_conf.get("checkpoint_redis_url") or "").strip()
+        if not redis_url:
+            raise ValueError(
+                "checkpoint_saver=redis 但未配置 checkpoint_redis_url（例如 redis://localhost:6379/0）"
+            )
+
+        # RedisSaver.from_conn_string 返回一个上下文管理器；这里在实例生命周期内保持连接可用
+        cm = RedisSaver.from_conn_string(redis_url)
+        checkpointer = cm.__enter__()
+        self._checkpointer_cm = cm
+
+        # 首次使用必须 setup() 以创建索引（幂等）
+        checkpointer.setup()
+        return checkpointer
+
+    def close(self):
+        """释放可能持有的 Redis checkpointer 连接。"""
+        if self._checkpointer_cm is None:
+            return
+        try:
+            self._checkpointer_cm.__exit__(None, None, None)
+        finally:
+            self._checkpointer_cm = None
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
 
     @staticmethod
     def _build_context(user_id: str | None, memory_query_for_inject: str) -> dict:
@@ -69,10 +113,10 @@ class CheckpointReactAgent:
         return context
 
     def _iter_assistant_stream_checkpoint(
-        self,
-        user_message: HumanMessage,
-        context: dict,
-        thread_id: str,
+            self,
+            user_message: HumanMessage,
+            context: dict,
+            thread_id: str,
     ):
         input_dict = {"messages": [user_message]}
         run_config = {
@@ -100,7 +144,7 @@ class CheckpointReactAgent:
                 if not text:
                     continue
                 if len(text) > len(prev_assistant_text) and text.startswith(prev_assistant_text):
-                    delta = text[len(prev_assistant_text) :]
+                    delta = text[len(prev_assistant_text):]
                     prev_assistant_text = text
                     if delta:
                         yield delta
@@ -123,12 +167,12 @@ class CheckpointReactAgent:
             )
 
     def execute_stream(
-        self,
-        messages: list[dict],
-        user_id: str | None = None,
-        *,
-        thread_id: str | None = None,
-        session_tag: str | None = None,
+            self,
+            messages: list[dict],
+            user_id: str | None = None,
+            *,
+            thread_id: str | None = None,
+            session_tag: str | None = None,
     ):
         """
         messages 仍兼容「全量列表」校验（最后一条须为 user），但**实际只把最后一条用户消息**送入带 checkpoint 的图。
@@ -161,8 +205,8 @@ class CheckpointReactAgent:
                 all_emitted.append(delta)
                 yield delta
             main_final_text = (
-                (getattr(self, "_last_turn_final_assistant_text", None) or "").strip()
-                or "".join(draft_parts).strip()
+                    (getattr(self, "_last_turn_final_assistant_text", None) or "").strip()
+                    or "".join(draft_parts).strip()
             )
             draft = main_final_text
             log_timing("agent_turn", "main_stream_done", char_count=len(draft), checkpoint=True)
@@ -210,8 +254,8 @@ class CheckpointReactAgent:
                 all_emitted.append(delta)
                 yield delta
             fix_final_text = (
-                (getattr(self, "_last_turn_final_assistant_text", None) or "").strip()
-                or "".join(fix_parts[1:]).strip()
+                    (getattr(self, "_last_turn_final_assistant_text", None) or "").strip()
+                    or "".join(fix_parts[1:]).strip()
             )
             self.last_turn_display_assistant_text = user_notice_text + fix_final_text
             log_timing(

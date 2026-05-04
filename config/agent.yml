@@ -1,9 +1,10 @@
 # Agent 运行时（对话轮次、图限制、自检、外部数据路径等）；记忆相关见 memory.yml（合并进 agent_conf）
 external_data_path: ../data/external/records.csv
 
-# 每次主 Agent 调 LLM 前是否用 tiktoken 估算输入 token（含 tools schema，条目多时会明显拖慢首包）
-# 生产环境建议 false；需要成本排查时再开
-agent_llm_token_estimate_enabled: false
+# 每次主 Agent 调 LLM 前是否用 DashScope Qwen tokenizer 估算输入 token
+# 会分段打印 system / messages / tools / extras / total（含 tools schema，条目多时会明显拖慢首包）
+# 生产环境建议 false；需要成本排查或观测时开成 true
+agent_llm_token_estimate_enabled: true
 
 # 多轮对话：传入模型的 user/assistant 字典条数上限；超出则丢弃最早的消息；<=0 不截断
 conversation_max_messages: 40
@@ -20,3 +21,16 @@ reflection_enabled: false
 reflection_min_score: 0.65
 reflection_max_extra_turns: 1
 # reflection_model: 不配则用主模型 chat_model；配了则用该名（可与 rag.yml turbo_chat_model_name 一致）
+
+# -------------------------
+# Checkpoint（LangGraph）
+# -------------------------
+# CheckpointReactAgent 的默认 checkpointer：
+# - memory：进程内（默认）
+# - redis：Redis 持久化（需要依赖 langgraph-checkpoint-redis，并确保 Redis 具备 RedisJSON + RediSearch；Redis 8+ 默认包含）
+checkpoint_saver: memory
+
+# 仅当 checkpoint_saver=redis 时生效，例如：
+# - 本机：redis://localhost:6379/0
+# - 带密码：redis://:password@localhost:6379/0
+checkpoint_redis_url: redis://localhost:6379/0

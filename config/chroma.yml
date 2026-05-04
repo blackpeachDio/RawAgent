@@ -1,5 +1,30 @@
 collection_name: agent # 向量数据库表名（RAG 知识库）
-persist_directory: ../chroma_db # RAG 向量库目录
+persist_directory: ../chroma_db # RAG 向量库目录（仅 Chroma 后端使用）
+
+# --- RAG 向量后端选择（见 rag/vector_backend.py；仅影响 RAG 知识库，用户记忆仍走 Chroma）---
+# chroma（默认，本地文件库，零依赖）
+# milvus （远程/本地 Milvus；需额外安装 pip install 'langchain-milvus' 'pymilvus'，
+#  Milvus Lite 只支持 Linux，Windows 请使用 docker 起的远程 Milvus）
+vector_backend: chroma
+
+# --- Milvus 专用（vector_backend=milvus 时生效；chroma 模式下全部忽略）---
+# 远程：milvus_uri 填 http(s)/grpc 地址；本地：填相对仓库根的 .db 文件路径（走 Milvus Lite）
+# milvus_uri: http://127.0.0.1:19530
+# milvus_uri: ../milvus_rag.db
+# Zilliz Cloud / 开启鉴权时填 token，否则留空
+# milvus_token: ""
+# 不配置则沿用 collection_name；想与 Chroma 并行保留数据时可改名（如 agent_milvus）
+# milvus_collection: agent
+# 一致性级别 Strong/Bounded/Session/Eventually；不配走 Milvus 默认
+# milvus_consistency_level: Bounded
+# 字段名自定义（通常不改；与手建 schema 对齐时才需要）
+# milvus_text_field: text
+# milvus_vector_field: vector
+# milvus_primary_field: pk
+# 离线索引启动时是否 drop 旧 collection 重建（慎用：生产环境保持 false）
+milvus_drop_old_on_index: false
+# hybrid_bm25_enabled=true 时全表拉文档建 BM25 的上限；库大时调低（Chroma 默认全量）
+bm25_dump_max_docs: 100000
 
 # 用户长期记忆向量库见 chroma_memory.yml（合并入 chroma_conf）
 
@@ -55,14 +80,21 @@ hybrid_bm25_enabled: false
 
 data_path: ../data # 数据文件夹
 md5_hex_store: md5.text # 去重记录
-# PDF 离线索引用 pdfplumber（正文 layout + 表格 extract_tables），见 utils/file_utils.pdf_loader
-allow_knowledge_file_type: [ "txt", "pdf" ]
+# PDF 离线索引用 pdfplumber：先转 Markdown（正文 layout + 表格 extract_tables → Markdown table），
+# 正文排除表格 bbox 避免与 Markdown 表重复；表头补全仅同页。超大 PDF：pdf_max_pages、pdf_log_progress_every。
+# 见 utils/file_utils.pdf_loader、rag/pdf_markdown_splitter（表感知切分）
+pdf_max_pages: 0
+pdf_log_progress_every: 25
+# Java 源码：按代码友好 splitter 切分（见 rag/offline_index.py）
+# Markdown：rag/pdf_markdown_splitter.TableAwareMarkdownTextSplitter（标题 + 表感知）
+allow_knowledge_file_type: [ "txt", "pdf", "md", "java" ]
 
 chunk_size: 200
 chunk_overlap: 20
 separators: [ "\n\n", "\n", ".", "!", "?", "。", "！", "？", " ", "" ]
 
 # --- 父子块（Small-to-Big）：子块进向量库；父块正文存 SQLite 映射表，不塞进 Chroma metadata ---
+# 父块切分按后缀：txt=递归分隔符；pdf/md=表感知 Markdown；java=Java 语言切分（见 rag/offline_index）
 # 开启后需重新跑离线索引；需配置 parent_child_map_path
 parent_child_enabled: false
 parent_chunk_size: 1200
