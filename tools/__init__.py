@@ -13,6 +13,7 @@ from .agent_tools import (
     rag_summarize,
     request_user_clarification,
 )
+from .hitl_tool_wrapper import wrap_tool_with_pre_invoke_hitl
 
 __all__ = [
     "fetch_external_data",
@@ -23,4 +24,5 @@ __all__ = [
     "get_weather",
     "rag_summarize",
     "request_user_clarification",
+    "wrap_tool_with_pre_invoke_hitl",
 ]

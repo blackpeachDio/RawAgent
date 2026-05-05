@@ -188,7 +188,7 @@ class CheckpointReactAgent:
             pl = raw
         else:
             pl = {"questions": str(raw), "missing_slots": [], "reason": ""}
-        self._hitl_wait_by_thread[thread_id] = {
+        entry: dict = {
             "original_query": (original_query or "").strip(),
             "user_id": user_id,
             "questions": (pl.get("questions") or "").strip(),
@@ -196,6 +196,11 @@ class CheckpointReactAgent:
             "reason": (pl.get("reason") or "").strip(),
             "run_id": run_id,
         }
+        # tool_hitl 等人机确认类 interrupt 的附加字段（供 SSE / 前端展示）
+        for k in ("kind", "tool_name", "proposed_args"):
+            if k in pl and pl[k] is not None:
+                entry[k] = pl[k]
+        self._hitl_wait_by_thread[thread_id] = entry
 
     def execute_resume_stream(
             self,

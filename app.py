@@ -56,6 +56,7 @@ def _consume_agent_sse(
     display_final = ""
     hitl_waiting = False
     thread_from_done: str | None = None
+    hitl_pending: dict | None = None
     try:
         with urllib.request.urlopen(req, timeout=600) as resp:
             while True:
@@ -69,6 +70,8 @@ def _consume_agent_sse(
                         if d:
                             merged.append(d)
                             live_placeholder.markdown("".join(merged))
+                    elif event == "hitl_pending":
+                        hitl_pending = json.loads(data)
                     elif event == "done":
                         obj = json.loads(data)
                         display_final = (obj.get("last_turn_display_assistant_text") or "").strip()
@@ -91,6 +94,7 @@ def _consume_agent_sse(
         "assistant_text": out,
         "hitl_waiting": hitl_waiting,
         "thread_id": thread_from_done,
+        "hitl_pending": hitl_pending,
     }
 
 
@@ -132,6 +136,20 @@ def _run_chat_resume(
     }
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     return _consume_agent_sse(url, body, live_placeholder, error_hint_url=base)
+
+
+def _sync_hitl_flags_from_chat_out(chat_out: dict, *, resume_tid: str) -> None:
+    """根据 SSE 返回更新人机回环相关 session_state。"""
+    if chat_out.get("hitl_waiting"):
+        st.session_state["_hitl_waiting"] = True
+        st.session_state["_hitl_thread_id"] = (chat_out.get("thread_id") or resume_tid).strip()
+        pending = chat_out.get("hitl_pending")
+        if pending is not None:
+            st.session_state["_hitl_pending"] = pending
+    else:
+        st.session_state["_hitl_waiting"] = False
+        st.session_state.pop("_hitl_thread_id", None)
+        st.session_state.pop("_hitl_pending", None)
 
 
 # 标题
@@ -190,6 +208,7 @@ with st.sidebar:
             st.session_state["chat_messages"] = []
             st.session_state.pop("_hitl_waiting", None)
             st.session_state.pop("_hitl_thread_id", None)
+            st.session_state.pop("_hitl_pending", None)
             # 同时重置 checkpoint thread，避免新对话继承旧图状态
             import uuid
 
@@ -211,7 +230,67 @@ for message in st.session_state["chat_messages"]:
         st.write(message["content"])
 
 if st.session_state.get("_hitl_waiting"):
-    st.info("助手正在等待您对上一问的补充说明；下一条输入会继续同一轮对话（不是新话题）。")
+    hp = st.session_state.get("_hitl_pending") or {}
+    resume_tid_btn = (st.session_state.get("_hitl_thread_id") or "").strip()
+    if hp.get("kind") == "tool_hitl" and resume_tid_btn:
+        st.subheader("工具调用待您确认")
+        st.caption(f"工具：`{hp.get('tool_name') or '?'}`")
+        if hp.get("questions"):
+            st.markdown(hp.get("questions") or "")
+        st.json(hp.get("proposed_args") or {})
+        choice = st.radio(
+            "请选择操作",
+            ("同意执行", "拒绝", "修改参数后执行"),
+            horizontal=True,
+            key="hitl_tool_choice",
+        )
+        reject_reason = ""
+        if choice == "拒绝":
+            reject_reason = st.text_input("拒绝原因（可选）", key="hitl_tool_reject_reason")
+        proposed = hp.get("proposed_args") or {}
+        if choice == "修改参数后执行":
+            st.caption("修改下列参数后点击下方「确认提交」。")
+            for pk, pv in proposed.items():
+                st.text_input(pk, value=str(pv), key=f"hitl_m_{pk}")
+        if st.button("确认提交", type="primary", key="hitl_tool_submit"):
+            if choice == "同意执行":
+                resume_body = json.dumps({"action": "approve"}, ensure_ascii=False)
+            elif choice == "拒绝":
+                resume_body = json.dumps(
+                    {"action": "reject", "reason": (reject_reason or "用户拒绝")},
+                    ensure_ascii=False,
+                )
+            else:
+                new_args = {pk: st.session_state.get(f"hitl_m_{pk}", "") for pk in proposed.keys()}
+                resume_body = json.dumps({"action": "modify", "args": new_args}, ensure_ascii=False)
+            with st.spinner("正在提交确认并续跑…"):
+                assistant_slot = st.chat_message("assistant").empty()
+                try:
+                    chat_out = _run_chat_resume(
+                        resume_body,
+                        user_id=user_id or None,
+                        thread_id=resume_tid_btn,
+                        live_placeholder=assistant_slot,
+                    )
+                    assistant_text = chat_out.get("assistant_text") or ""
+                    _sync_hitl_flags_from_chat_out(chat_out, resume_tid=resume_tid_btn)
+                except Exception as e:
+                    assistant_text = f"[错误] {e!s}"
+                    assistant_slot.markdown(assistant_text)
+                    st.session_state["_hitl_waiting"] = False
+                    st.session_state.pop("_hitl_thread_id", None)
+                    st.session_state.pop("_hitl_pending", None)
+                    logger.exception("[app] 工具人机确认 resume 失败")
+            st.session_state["chat_messages"].append(
+                {"role": "assistant", "content": assistant_text}
+            )
+            if user_id and assistant_text:
+                history_store.append_message(user_id, "assistant", assistant_text)
+            st.rerun()
+    else:
+        st.info(
+            "助手正在等待您对上一问的补充说明；下一条输入会继续同一轮对话（不是新话题）。"
+        )
 
 prompt = st.chat_input()
 
@@ -256,17 +335,13 @@ if prompt:
                     live_placeholder=assistant_slot,
                 )
             assistant_text = chat_out.get("assistant_text") or ""
-            if chat_out.get("hitl_waiting"):
-                st.session_state["_hitl_waiting"] = True
-                st.session_state["_hitl_thread_id"] = (chat_out.get("thread_id") or resume_tid).strip()
-            else:
-                st.session_state["_hitl_waiting"] = False
-                st.session_state.pop("_hitl_thread_id", None)
+            _sync_hitl_flags_from_chat_out(chat_out, resume_tid=resume_tid)
         except Exception as e:
             assistant_text = f"[错误] {e!s}"
             assistant_slot.markdown(assistant_text)
             st.session_state["_hitl_waiting"] = False
             st.session_state.pop("_hitl_thread_id", None)
+            st.session_state.pop("_hitl_pending", None)
             logger.exception("[app] SSE 对话失败")
 
     st.session_state["chat_messages"].append(

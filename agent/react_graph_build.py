@@ -18,6 +18,7 @@ from tools import (
     get_weather,
     rag_summarize,
     request_user_clarification,
+    wrap_tool_with_pre_invoke_hitl,
 )
 from tools.middleware import (
     after_model,
@@ -46,13 +47,19 @@ def compile_react_agent(*, checkpointer=None) -> "CompiledStateGraph":
     构建与线上一致的 ReAct 图；传入 checkpointer 时状态按 thread_id 持久化（见 CheckpointReactAgent）。
     """
     mcp_tools = load_remote_mcp_tools_sync()
+    # 人机确认：仅在有 checkpoint 时可 interrupt/resume；无 checkpoint 时用原始工具
+    ext_data_tool = (
+        wrap_tool_with_pre_invoke_hitl(fetch_external_data)
+        if checkpointer is not None
+        else fetch_external_data
+    )
     base_tools: list = [
         rag_summarize,
         get_weather,
         get_user_id,
         get_user_location,
         get_current_month,
-        fetch_external_data,
+        ext_data_tool,
         fill_context_for_report,
         *build_skill_tools(),
     ]

@@ -50,13 +50,17 @@ def get_agent() -> CheckpointReactAgent:
 
 def _hitl_pending_payload(agent: CheckpointReactAgent, thread_id: str) -> dict[str, Any]:
     meta = agent._hitl_wait_by_thread.get(thread_id) or {}
-    return {
+    out: dict[str, Any] = {
         "thread_id": thread_id,
         "questions": meta.get("questions") or "",
         "missing_slots": meta.get("missing_slots") or [],
         "run_id": meta.get("run_id"),
         "reason": meta.get("reason") or "",
     }
+    for k in ("kind", "tool_name", "proposed_args"):
+        if k in meta and meta[k] is not None:
+            out[k] = meta[k]
+    return out
 
 
 def _chat_stream_generator(payload: dict[str, Any]):
