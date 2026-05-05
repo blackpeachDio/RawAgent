@@ -4,6 +4,7 @@
 - 使用 compile_react_agent(checkpointer=...)，通过 configurable.thread_id 区分会话线程。
 - 每轮调用只向图输入「本条用户消息」（HumanMessage），历史由 checkpoint 中的 messages 合并，避免与全量 messages 重复叠加。
 - 长期记忆注入、reflection、记忆入队与 ReactAgent 对齐。
+- 人机回环：模型调用 ``request_user_clarification`` 时在工具内 ``interrupt``；SSE 发 ``hitl_pending`` 后由 ``/v1/chat/resume`` 传入 ``Command(resume=...)`` 续跑同一线程。
 
 用法示例（伪代码）::
 
@@ -20,12 +21,10 @@
 """
 from __future__ import annotations
 
-from contextlib import AbstractContextManager
-
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.checkpoint.redis import RedisSaver
 from langgraph.errors import GraphRecursionError
+from langgraph.types import Command
 
 from agent.react_agent import _inject_memory_context
 from agent.react_graph_build import compile_react_agent
@@ -56,47 +55,27 @@ class CheckpointReactAgent:
     """compile_react_agent + checkpointer；stream 时传入 thread_id。"""
 
     def __init__(self, checkpointer=None):
-        self._checkpointer_cm: AbstractContextManager | None = None
         self.checkpointer = checkpointer or self._make_default_checkpointer()
         self.agent = compile_react_agent(checkpointer=self.checkpointer)
         self._max_messages = int(agent_conf.get("conversation_max_messages", 40))
         self._recursion_limit = int(agent_conf.get("agent_recursion_limit", 40))
+        # thread_id -> 挂起元数据（request_user_clarification + interrupt 后）
+        self._hitl_wait_by_thread: dict[str, dict] = {}
 
         maybe_preload_rerank_cross_encoder()
 
     def _make_default_checkpointer(self):
-        """
-        默认 checkpointer：
-        - memory：进程内（默认，零依赖）
-        - redis：基于 Redis 的持久化 checkpoint（需要安装 langgraph-checkpoint-redis，并配置 redis 连接串）
-        """
+        """默认 checkpointer：进程内 MemorySaver（重启丢失）。"""
         saver = (agent_conf.get("checkpoint_saver") or "memory").strip().lower()
-        if saver != "redis":
-            return MemorySaver()
-
-        redis_url = (agent_conf.get("checkpoint_redis_url") or "").strip()
-        if not redis_url:
-            raise ValueError(
-                "checkpoint_saver=redis 但未配置 checkpoint_redis_url（例如 redis://localhost:6379/0）"
+        if saver == "redis":
+            logger.warning(
+                "checkpoint_saver=redis 已不再支持，已改用 MemorySaver；请从配置中删除 redis 相关项。"
             )
-
-        # RedisSaver.from_conn_string 返回一个上下文管理器；这里在实例生命周期内保持连接可用
-        cm = RedisSaver.from_conn_string(redis_url)
-        checkpointer = cm.__enter__()
-        self._checkpointer_cm = cm
-
-        # 首次使用必须 setup() 以创建索引（幂等）
-        checkpointer.setup()
-        return checkpointer
+        return MemorySaver()
 
     def close(self):
-        """释放可能持有的 Redis checkpointer 连接。"""
-        if self._checkpointer_cm is None:
-            return
-        try:
-            self._checkpointer_cm.__exit__(None, None, None)
-        finally:
-            self._checkpointer_cm = None
+        """预留：实例销毁前清理资源（当前默认 checkpointer 无需释放）。"""
+        pass
 
     def __del__(self):
         try:
@@ -112,13 +91,27 @@ class CheckpointReactAgent:
             context.update(_inject_memory_context(user_id, q))
         return context
 
+    @staticmethod
+    def _first_interrupt_entry(raw) -> tuple[object, str | None]:
+        seq = raw if isinstance(raw, (list, tuple)) else (raw,)
+        if not seq:
+            return None, None
+        first = seq[0]
+        val = getattr(first, "value", first)
+        iid = getattr(first, "id", None)
+        return val, iid
+
     def _iter_assistant_stream_checkpoint(
             self,
-            user_message: HumanMessage,
+            stream_input: dict | Command,
             context: dict,
             thread_id: str,
+            hitl_holder: list[dict],
     ):
-        input_dict = {"messages": [user_message]}
+        """
+        stream_input: ``{"messages": [HumanMessage(...)]}`` 或 ``Command(resume=...)``。
+        hitl_holder: 若本段流式触发 interrupt，则写入单元素 ``{"value": payload, "id": run_id}`` 并结束生成器。
+        """
         run_config = {
             "configurable": {"thread_id": thread_id},
             "recursion_limit": self._recursion_limit,
@@ -127,12 +120,25 @@ class CheckpointReactAgent:
         last_ai: AIMessage | None = None
         try:
             stream_iter = self.agent.stream(
-                input_dict,
-                stream_mode="values",
+                stream_input,
+                stream_mode=["updates", "values"],
                 context=context,
                 config=run_config,
             )
-            for chunk in stream_iter:
+            for mode, chunk in stream_iter:
+                if not isinstance(chunk, dict):
+                    continue
+                ir = chunk.get("__interrupt__")
+                if ir and not hitl_holder:
+                    val, iid = self._first_interrupt_entry(ir)
+                    hitl_holder.append({"value": val, "id": iid})
+                    pl = val if isinstance(val, dict) else {"questions": str(val)}
+                    q = (pl.get("questions") or "").strip()
+                    if q:
+                        yield "\n\n" + q
+                    return
+                if mode != "values":
+                    continue
                 raw_msgs = chunk.get("messages") or []
                 if not raw_msgs:
                     continue
@@ -166,6 +172,179 @@ class CheckpointReactAgent:
                 assistant_final_display_text(last_ai) if last_ai else ""
             )
 
+    def _hitl_register_from_holder(
+            self,
+            thread_id: str,
+            hitl_holder: list[dict],
+            *,
+            original_query: str,
+            user_id: str | None,
+    ) -> None:
+        if not hitl_holder:
+            return
+        raw = hitl_holder[0]["value"]
+        run_id = hitl_holder[0].get("id")
+        if isinstance(raw, dict):
+            pl = raw
+        else:
+            pl = {"questions": str(raw), "missing_slots": [], "reason": ""}
+        self._hitl_wait_by_thread[thread_id] = {
+            "original_query": (original_query or "").strip(),
+            "user_id": user_id,
+            "questions": (pl.get("questions") or "").strip(),
+            "missing_slots": list(pl.get("missing_slots") or []),
+            "reason": (pl.get("reason") or "").strip(),
+            "run_id": run_id,
+        }
+
+    def execute_resume_stream(
+            self,
+            *,
+            resume_text: str,
+            thread_id: str,
+            user_id: str | None = None,
+    ):
+        """
+        在同 checkpoint 线程上 ``Command(resume=...)`` 续跑被 ``request_user_clarification`` 挂起的图。
+        """
+        tid = (thread_id or "").strip()
+        if not tid:
+            raise ValueError("thread_id 不能为空")
+        if tid not in self._hitl_wait_by_thread:
+            raise ValueError(
+                "未找到待恢复的人机回环状态，请确认 thread_id 与挂起时一致，或先通过对话触发追问。"
+            )
+        meta = self._hitl_wait_by_thread[tid]
+        original_query = (meta.get("original_query") or "").strip()
+        uid = user_id if user_id is not None else meta.get("user_id")
+        resume_s = (resume_text or "").strip()
+        if not resume_s:
+            raise ValueError("resume 补充内容不能为空")
+
+        query_preview = resume_s[:160] + ("…" if len(resume_s) > 160 else "")
+        log_timing("agent_turn", "resume_start", query_preview=query_preview, checkpoint=True)
+        self.last_turn_display_assistant_text = ""
+        main_final_text = ""
+        fix_final_text = ""
+        user_notice_text = ""
+        combined_query = f"{original_query}\n[用户补充]\n{resume_s}"
+
+        try:
+            ctx0 = self._build_context(uid, original_query)
+            hitl_h: list[dict] = []
+            draft_parts: list[str] = []
+            for delta in self._iter_assistant_stream_checkpoint(
+                    Command(resume=resume_s),
+                    ctx0,
+                    tid,
+                    hitl_h,
+            ):
+                draft_parts.append(delta)
+                yield delta
+
+            if hitl_h:
+                self._hitl_register_from_holder(
+                    tid, hitl_h, original_query=original_query, user_id=uid
+                )
+                main_final_text = (
+                        (getattr(self, "_last_turn_final_assistant_text", None) or "").strip()
+                        or "".join(draft_parts).strip()
+                )
+                self._last_turn_final_assistant_text = main_final_text
+                self.last_turn_display_assistant_text = main_final_text
+                log_timing("agent_turn", "resume_stream_nested_hitl", checkpoint=True)
+                return
+
+            del self._hitl_wait_by_thread[tid]
+
+            main_final_text = (
+                    (getattr(self, "_last_turn_final_assistant_text", None) or "").strip()
+                    or "".join(draft_parts).strip()
+            )
+            draft = main_final_text
+            log_timing("agent_turn", "resume_main_done", char_count=len(draft), checkpoint=True)
+
+            if not bool(agent_conf.get("reflection_enabled", False)):
+                self.last_turn_display_assistant_text = main_final_text
+                return
+            if not draft.strip():
+                self.last_turn_display_assistant_text = main_final_text
+                return
+
+            from agent.reflect_critique import reflect_critique_score
+
+            min_score = float(agent_conf.get("reflection_min_score", 0.65))
+            extra_turns = int(agent_conf.get("reflection_max_extra_turns", 1))
+            score, reason = reflect_critique_score(combined_query, draft)
+            logger.info(
+                "[reflection][checkpoint][resume] score=%.3f min=%.3f reason=%s",
+                score,
+                min_score,
+                (reason[:160] + "…") if len(reason) > 160 else reason,
+            )
+            if score >= min_score or extra_turns <= 0:
+                self.last_turn_display_assistant_text = main_final_text
+                return
+
+            correction = (
+                f"审核反馈（仅供你改进回答，不要复述本句）：{reason or '质量不足'}。"
+                "请输出修正后的完整回答，直接面向用户，不要提及审核或修改过程。"
+            )
+            ctx1 = self._build_context(uid, original_query)
+
+            user_notice_text = (
+                "\n\n---\n"
+                "【提示】刚才的回答未通过质量自检，可能存在不准确、不完整或与问题不够贴切之处。"
+                "正在重新生成回复，请稍候。\n\n"
+            )
+            yield user_notice_text
+
+            fix_parts: list[str] = [user_notice_text]
+            correction_msg = HumanMessage(content=correction)
+            hitl_reflect: list[dict] = []
+            for delta in self._iter_assistant_stream_checkpoint(
+                    {"messages": [correction_msg]},
+                    ctx1,
+                    tid,
+                    hitl_reflect,
+            ):
+                fix_parts.append(delta)
+                yield delta
+            if hitl_reflect:
+                self._hitl_register_from_holder(
+                    tid, hitl_reflect, original_query=original_query, user_id=uid
+                )
+                self._hitl_wait_by_thread[tid]["original_query"] = combined_query
+                self.last_turn_display_assistant_text = (
+                        ("".join(draft_parts) + "".join(fix_parts)).strip()
+                )
+                log_timing("agent_turn", "resume_reflect_nested_hitl", checkpoint=True)
+                return
+
+            fix_final_text = (
+                    (getattr(self, "_last_turn_final_assistant_text", None) or "").strip()
+                    or "".join(fix_parts[1:]).strip()
+            )
+            self.last_turn_display_assistant_text = user_notice_text + fix_final_text
+            log_timing(
+                "agent_turn",
+                "resume_reflection_stream_done",
+                char_count=len("".join(fix_parts)),
+                checkpoint=True,
+            )
+        finally:
+            if not self.last_turn_display_assistant_text.strip():
+                self.last_turn_display_assistant_text = main_final_text or (
+                    (getattr(self, "_last_turn_final_assistant_text", None) or "").strip()
+                )
+            try:
+                persist = self.last_turn_display_assistant_text.strip()
+                if uid and persist and tid not in self._hitl_wait_by_thread:
+                    enqueue_memory_job(uid, combined_query, persist)
+            except Exception as e:
+                logger.warning("[agent][checkpoint][resume] 记忆抽取入队失败: %s", e)
+            log_timing("agent_turn", "resume_end", checkpoint=True)
+
     def execute_stream(
             self,
             messages: list[dict],
@@ -178,6 +357,7 @@ class CheckpointReactAgent:
         messages 仍兼容「全量列表」校验（最后一条须为 user），但**实际只把最后一条用户消息**送入带 checkpoint 的图。
 
         thread_id 优先；否则用 make_checkpoint_thread_id(user_id, session_tag)。
+        若该 thread 已处于人机追问挂起状态，须先调用 ``execute_resume_stream``，不可重复送新 user 消息入图。
         """
         validate_chat_messages(messages)
         if not messages:
@@ -187,6 +367,10 @@ class CheckpointReactAgent:
 
         original_query = (messages[-1].get("content") or "").strip()
         tid = (thread_id or "").strip() or make_checkpoint_thread_id(user_id, session_tag)
+        if tid in self._hitl_wait_by_thread:
+            raise ValueError(
+                "该会话正在等待用户补充信息，请先通过 /v1/chat/resume 提交补充内容后再发起普通对话。"
+            )
 
         query_preview = original_query[:160] + ("…" if len(original_query) > 160 else "")
         log_timing("agent_turn", "start", query_preview=query_preview, checkpoint=True)
@@ -195,15 +379,32 @@ class CheckpointReactAgent:
         main_final_text = ""
         fix_final_text = ""
         user_notice_text = ""
+        hitl_main: list[dict] = []
         try:
             ctx0 = self._build_context(user_id, original_query)
             user_human = HumanMessage(content=original_query)
 
             draft_parts: list[str] = []
-            for delta in self._iter_assistant_stream_checkpoint(user_human, ctx0, tid):
+            for delta in self._iter_assistant_stream_checkpoint(
+                    {"messages": [user_human]},
+                    ctx0,
+                    tid,
+                    hitl_main,
+            ):
                 draft_parts.append(delta)
                 all_emitted.append(delta)
                 yield delta
+
+            if hitl_main:
+                main_final_text = "".join(draft_parts).strip()
+                self._last_turn_final_assistant_text = main_final_text
+                self.last_turn_display_assistant_text = main_final_text
+                self._hitl_register_from_holder(
+                    tid, hitl_main, original_query=original_query, user_id=user_id
+                )
+                log_timing("agent_turn", "main_hitl_suspend", checkpoint=True)
+                return
+
             main_final_text = (
                     (getattr(self, "_last_turn_final_assistant_text", None) or "").strip()
                     or "".join(draft_parts).strip()
@@ -249,10 +450,26 @@ class CheckpointReactAgent:
 
             fix_parts: list[str] = [user_notice_text]
             correction_msg = HumanMessage(content=correction)
-            for delta in self._iter_assistant_stream_checkpoint(correction_msg, ctx1, tid):
+            hitl_reflect: list[dict] = []
+            for delta in self._iter_assistant_stream_checkpoint(
+                    {"messages": [correction_msg]},
+                    ctx1,
+                    tid,
+                    hitl_reflect,
+            ):
                 fix_parts.append(delta)
                 all_emitted.append(delta)
                 yield delta
+            if hitl_reflect:
+                self._hitl_register_from_holder(
+                    tid, hitl_reflect, original_query=original_query, user_id=user_id
+                )
+                self.last_turn_display_assistant_text = (
+                        (main_final_text + "".join(fix_parts)).strip()
+                )
+                log_timing("agent_turn", "reflection_hitl_suspend", checkpoint=True)
+                return
+
             fix_final_text = (
                     (getattr(self, "_last_turn_final_assistant_text", None) or "").strip()
                     or "".join(fix_parts[1:]).strip()
@@ -271,7 +488,8 @@ class CheckpointReactAgent:
                 )
             try:
                 persist = self.last_turn_display_assistant_text.strip()
-                if user_id and persist:
+                skip_mem = tid in self._hitl_wait_by_thread
+                if user_id and persist and not skip_mem:
                     enqueue_memory_job(user_id, original_query, persist)
             except Exception as e:
                 logger.warning("[agent][checkpoint] 记忆抽取入队失败: %s", e)

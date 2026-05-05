@@ -1,0 +1,5 @@
+# Streamlit 默认会监视依赖包；对 transformers 等大包做路径探测时会惰性子 import，
+# 进而拉取需 torchvision 的视觉模块并报 ModuleNotFoundError。
+# 关闭文件监视可避免该问题（应用代码改动后需手动刷新浏览器）。
+[server]
+fileWatcherType = "none"

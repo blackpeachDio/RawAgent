@@ -1,7 +1,7 @@
 """
 事实性记忆存储（热插拔）：hobby、name、偏好等，必须覆盖更新不能追加。
 
-实现：InMemoryFactualStore（当前）、RedisFactualStore（后期）。
+实现：InMemoryFactualStore（进程内 dict）。
 
 写入：同 key 覆盖旧值；内存实现额外记录每 key 的 updated_at（ISO），便于排查多轮冲突。
 """
@@ -31,7 +31,7 @@ class FactualStore(ABC):
 
 
 class InMemoryFactualStore(FactualStore):
-    """内存实现：进程内 dict，重启丢失。后期可替换为 RedisFactualStore。"""
+    """内存实现：进程内 dict，重启丢失。"""
 
     def __init__(self):
         # user_id -> {key -> value}
@@ -54,20 +54,6 @@ class InMemoryFactualStore(FactualStore):
         return dict(self._updated_at.get(user_id, {}))
 
 
-class RedisFactualStore(FactualStore):
-    """Redis 实现（占位）：后期接入 Redis 持久化，替换内存。"""
-
-    def __init__(self):
-        # TODO: self._redis = redis.Redis(...)
-        raise NotImplementedError("RedisFactualStore 未实现，请使用 factual_store_type: memory")
-
-    def set(self, user_id: str, key: str, value: str) -> None:
-        raise NotImplementedError
-
-    def get_all(self, user_id: str) -> dict[str, str]:
-        raise NotImplementedError
-
-
 _factual_store: FactualStore | None = None
 
 
@@ -79,7 +65,10 @@ def get_factual_store() -> FactualStore:
         if store_type == "memory":
             _factual_store = InMemoryFactualStore()
         elif store_type == "redis":
-            raise NotImplementedError("RedisFactualStore 未实现，请将 factual_store_type 设为 memory")
+            logger.warning(
+                "factual_store_type=redis 已不再支持，使用 InMemoryFactualStore；请改为 factual_store_type: memory。"
+            )
+            _factual_store = InMemoryFactualStore()
         else:
             logger.warning("[FactualStore] 未知类型 %s，使用 InMemoryFactualStore", store_type)
             _factual_store = InMemoryFactualStore()

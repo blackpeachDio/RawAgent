@@ -25,12 +25,5 @@ reflection_max_extra_turns: 1
 # -------------------------
 # Checkpoint（LangGraph）
 # -------------------------
-# CheckpointReactAgent 的默认 checkpointer：
-# - memory：进程内（默认）
-# - redis：Redis 持久化（需要依赖 langgraph-checkpoint-redis，并确保 Redis 具备 RedisJSON + RediSearch；Redis 8+ 默认包含）
+# CheckpointReactAgent 默认使用进程内 MemorySaver（重启丢失）。仅保留 checkpoint_saver 键用于兼容旧配置。
 checkpoint_saver: memory
-
-# 仅当 checkpoint_saver=redis 时生效，例如：
-# - 本机：redis://localhost:6379/0
-# - 带密码：redis://:password@localhost:6379/0
-checkpoint_redis_url: redis://localhost:6379/0

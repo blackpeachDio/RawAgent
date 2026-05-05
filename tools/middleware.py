@@ -17,6 +17,7 @@ from langchain.agents.middleware import (
 )
 from langchain.tools.tool_node import ToolCallRequest
 from langchain_core.messages import ToolMessage
+from langgraph.errors import GraphInterrupt
 from langgraph.runtime import Runtime
 from langgraph.types import Command
 from utils.config_utils import agent_conf
@@ -78,6 +79,8 @@ def monitor_tool(
             request.runtime.context["report"] = True
 
         return result
+    except GraphInterrupt:
+        raise
     except Exception as e:
         name = request.tool_call.get("name", "") if isinstance(request.tool_call, dict) else getattr(request.tool_call, "name", "")
         log_timing("agent_tool", "end", name=str(name or "unknown"), error=True)

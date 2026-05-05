@@ -2,7 +2,7 @@
 完整对话历史存储（热插拔设计，便于后续切换为 MySQL 等）。
 
 当前实现：本地文件 history/{user_id}.json
-后续可替换为：MySQLHistoryStore、RedisHistoryStore 等。
+后续可替换为其它持久化实现（如数据库）。
 """
 from __future__ import annotations
 

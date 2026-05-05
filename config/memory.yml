@@ -28,7 +28,7 @@ memory_extract_gate_max_tokens: 256
 memory_extract_gate_max_user_chars: 8000
 memory_extract_gate_max_assistant_chars: 12000
 
-# 事实性记忆存储（热插拔）：memory=内存，redis=Redis（后期）
+# 事实性记忆存储：memory=进程内内存（重启丢失）；redis 历史值会记录告警并回退为 memory
 factual_store_type: memory
 
 # 记忆抽取任务队列：thread=进程内内存队列+守护线程；file=仅写 JSON 到目录，由 ``python -m memory.queue_consumer`` 消费

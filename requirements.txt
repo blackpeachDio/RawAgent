@@ -5,8 +5,6 @@ contextvars
 langgraph
 langchain-core
 langchain
-# LangGraph Redis checkpoint saver
-langgraph-checkpoint-redis
 # hybrid BM25+向量 RRF（rag/retrieval_pipeline EnsembleRetriever）
 langchain-classic
 streamlit

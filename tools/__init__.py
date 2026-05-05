@@ -11,6 +11,7 @@ from .agent_tools import (
     get_user_location,
     get_weather,
     rag_summarize,
+    request_user_clarification,
 )
 
 __all__ = [
@@ -21,4 +22,5 @@ __all__ = [
     "get_user_location",
     "get_weather",
     "rag_summarize",
+    "request_user_clarification",
 ]
