@@ -148,6 +148,8 @@ def fill_context_for_report():
             "questions 须为完整中文、直接展示给用户的追问说明；"
             "missing_slots 为逗号分隔的缺失要点摘要（可选）。"
             "调用后对话将暂停直到用户在前端补充；禁止编造用户未提供的信息。"
+            "仅在关键参数绝对无法从上下文推导或获取时使用。"
+            "优先尝试使用其他工具，失败后才调用此工具。"
     )
 )
 def request_user_clarification(

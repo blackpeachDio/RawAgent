@@ -76,8 +76,8 @@ def compile_react_agent(*, checkpointer=None) -> "CompiledStateGraph":
             after_model,
             SummarizationMiddleware(
                 model=turbo_model,
-                trigger=("messages", 5),
-                keep=("messages", 2),
+                trigger=("messages", 10),
+                keep=("messages", 5),
                 summary_prompt="请用简洁中文，客观总结下面的对话内容：\n\n{messages}",
             ),
         ],

@@ -63,7 +63,6 @@ def _consume_agent_sse(
                 if not chunk:
                     break
                 for event, data in decoder.feed(chunk):
-                    print(event, data)
                     if event == "chunk":
                         obj = json.loads(data)
                         d = obj.get("delta") or ""
@@ -152,6 +151,14 @@ st.session_state.setdefault("_history_loaded_user", "")
 st.session_state.setdefault("_prev_user_id", "")
 history_store = get_history_store()
 
+
+def _history_row(m: dict) -> dict:
+    row = {"role": m["role"], "content": m["content"]}
+    if m.get("hitl_clarification"):
+        row["hitl_clarification"] = True
+    return row
+
+
 with st.sidebar:
     st.caption("本会话的对话仅保存在当前浏览器标签页，与其他访问者隔离。")
     st.caption(
@@ -173,9 +180,7 @@ with st.sidebar:
                 st.session_state["_prev_user_id"] = user_id
                 st.session_state["_history_loaded_user"] = ""
                 loaded = history_store.get_messages(user_id)
-                st.session_state["chat_messages"] = [
-                    {"role": m["role"], "content": m["content"]} for m in loaded
-                ]
+                st.session_state["chat_messages"] = [_history_row(m) for m in loaded]
                 st.session_state["_history_loaded_user"] = user_id
             else:
                 st.session_state["chat_messages"] = []
@@ -196,23 +201,36 @@ user_id = (st.session_state.get("user_id") or "").strip()
 if user_id and st.session_state["chat_messages"] == [] and st.session_state["_history_loaded_user"] != user_id:
     loaded = history_store.get_messages(user_id)
     if loaded:
-        st.session_state["chat_messages"] = [
-            {"role": m["role"], "content": m["content"]} for m in loaded
-        ]
+        st.session_state["chat_messages"] = [_history_row(m) for m in loaded]
     st.session_state["_history_loaded_user"] = user_id
 
 for message in st.session_state["chat_messages"]:
-    st.chat_message(message["role"]).write(message["content"])
+    with st.chat_message(message["role"]):
+        if message.get("hitl_clarification"):
+            st.caption("补充说明（人机回环）")
+        st.write(message["content"])
+
+if st.session_state.get("_hitl_waiting"):
+    st.info("助手正在等待您对上一问的补充说明；下一条输入会继续同一轮对话（不是新话题）。")
 
 prompt = st.chat_input()
 
 if prompt:
-    st.chat_message("user").write(prompt)
-    st.session_state["chat_messages"].append({"role": "user", "content": prompt})
+    user_msg: dict = {"role": "user", "content": prompt}
+    if st.session_state.get("_hitl_waiting"):
+        user_msg["hitl_clarification"] = True
+    with st.chat_message("user"):
+        if user_msg.get("hitl_clarification"):
+            st.caption("补充说明（人机回环）")
+        st.write(prompt)
+    st.session_state["chat_messages"].append(user_msg)
 
     # 长期记忆：持久化完整历史（仅当有 user_id）
     if user_id:
-        history_store.append_message(user_id, "user", prompt)
+        hist_kw = {}
+        if user_msg.get("hitl_clarification"):
+            hist_kw["hitl_clarification"] = True
+        history_store.append_message(user_id, "user", prompt, **hist_kw)
 
     set_session_id(user_id)
 
