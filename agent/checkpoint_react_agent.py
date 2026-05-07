@@ -277,6 +277,7 @@ class CheckpointReactAgent:
                 return
 
             from agent.reflect_critique import reflect_critique_score
+            from agent.reflect_regenerate import build_regeneration_user_message, run_reflection_step
 
             min_score = float(agent_conf.get("reflection_min_score", 0.65))
             extra_turns = int(agent_conf.get("reflection_max_extra_turns", 1))
@@ -291,10 +292,8 @@ class CheckpointReactAgent:
                 self.last_turn_display_assistant_text = main_final_text
                 return
 
-            correction = (
-                f"审核反馈（仅供你改进回答，不要复述本句）：{reason or '质量不足'}。"
-                "请输出修正后的完整回答，直接面向用户，不要提及审核或修改过程。"
-            )
+            reflection_text = run_reflection_step(combined_query, draft, reason)
+            correction = build_regeneration_user_message(combined_query, reflection_text, reason)
             ctx1 = self._build_context(uid, original_query)
 
             user_notice_text = (
@@ -425,6 +424,7 @@ class CheckpointReactAgent:
                 return
 
             from agent.reflect_critique import reflect_critique_score
+            from agent.reflect_regenerate import build_regeneration_user_message, run_reflection_step
 
             min_score = float(agent_conf.get("reflection_min_score", 0.65))
             extra_turns = int(agent_conf.get("reflection_max_extra_turns", 1))
@@ -439,10 +439,8 @@ class CheckpointReactAgent:
                 self.last_turn_display_assistant_text = main_final_text
                 return
 
-            correction = (
-                f"审核反馈（仅供你改进回答，不要复述本句）：{reason or '质量不足'}。"
-                "请输出修正后的完整回答，直接面向用户，不要提及审核或修改过程。"
-            )
+            reflection_text = run_reflection_step(original_query, draft, reason)
+            correction = build_regeneration_user_message(original_query, reflection_text, reason)
             ctx1 = self._build_context(user_id, original_query)
 
             user_notice_text = (

@@ -77,6 +77,24 @@ def load_reflect_critique_prompts() -> str:
         raise
 
 
+def load_reflect_step_prompts() -> str:
+    """低分后再生成前的反思；占位符 <<<REFLECT_QUERY>>>、<<<DRAFT_ANSWER>>>、<<<CRITIQUE_REASON>>>。"""
+    try:
+        path_key = prompts_conf.get(
+            "reflect_step_prompt_path",
+            "../prompts/reflect_step_prompt.txt",
+        )
+        path = resolve_repo_path(path_key)
+    except Exception as e:
+        logger.error("[load_reflect_step_prompts] 路径解析失败: %s", e)
+        raise
+    try:
+        return open(path, "r", encoding="utf-8").read()
+    except Exception as e:
+        logger.error("[load_reflect_step_prompts] 读取失败: %s", e)
+        raise
+
+
 def load_mem_extract_prompts():
     try:
         prompt_path = prompts_conf.get("mem_extract_prompt_path", "../prompts/mem_extract_prompt.txt")

@@ -137,7 +137,8 @@ class ReactAgent:
         Yields:
             str: 本轮助手流式增量（可含推理/思考过程，供前台实时展示）。
             会话持久化与 last_turn_display_assistant_text 为去掉推理后的正文。
-            若开启 reflection：先发主回答流式增量，结束后再做审核；未达标时先 yield 一段用户可见提示，再流式输出修正轮。
+            若开启 reflection：先发主回答流式增量，结束后再做审核；未达标时可选先生成「前置反思」，
+            再将用户原问题 + 反思 + 审核要点一并注入，流式输出修正轮。
         """
         # 验证信息
         validate_chat_messages(messages)
@@ -183,6 +184,7 @@ class ReactAgent:
 
             # 主回答流结束后的 LLM 自检（见 config/agent.yml reflection_*）
             from agent.reflect_critique import reflect_critique_score
+            from agent.reflect_regenerate import build_regeneration_user_message, run_reflection_step
 
             min_score = float(agent_conf.get("reflection_min_score", 0.65))
             extra_turns = int(agent_conf.get("reflection_max_extra_turns", 1))
@@ -198,10 +200,11 @@ class ReactAgent:
                 self.last_turn_display_assistant_text = main_final_text
                 return
 
-            # 修正轮：仅内存里追加 assistant+user，再流式；不入 session，记忆注入仍用 original_query
-            correction = (
-                f"审核反馈（仅供你改进回答，不要复述本句）：{reason or '质量不足'}。"
-                "请输出修正后的完整回答，直接面向用户，不要提及审核或修改过程。"
+            reflection_text = run_reflection_step(original_query, draft, reason)
+            correction = build_regeneration_user_message(
+                original_query,
+                reflection_text,
+                reason,
             )
             messages_retry = list(messages) + [
                 {"role": "assistant", "content": draft},
