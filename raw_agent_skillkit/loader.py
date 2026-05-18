@@ -1,4 +1,4 @@
-"""从 config/skills.yml 与 raw_agent_skills/ 加载 SKILL.md（与业务代码隔离）。"""
+"""从 config/skills.yml 与 raw_agent_skills/ 加载 SKILL.md，拼入 system。"""
 from __future__ import annotations
 
 import os
@@ -87,3 +87,51 @@ def read_skill_body(skill_id: str) -> tuple[dict, str] | None:
     if max_chars > 0 and len(body) > max_chars:
         body = body[:max_chars] + f"\n\n[已截断，max_body_chars={max_chars}]"
     return meta, body
+
+
+_inject_system_block_cache: str | None = None
+
+
+def build_skills_system_inject_block() -> str:
+    """
+    将各技能 SKILL.md 正文拼成一段，供 middleware 追加到 system。
+    进程内缓存；改 SKILL.md 后需重启进程生效。
+    """
+    global _inject_system_block_cache
+    if not skills_conf.get("enabled", False):
+        return ""
+    if _inject_system_block_cache is not None:
+        return _inject_system_block_cache
+
+    entries = list_skill_entries()
+    if not entries:
+        _inject_system_block_cache = ""
+        return ""
+
+    raw_tot = skills_conf.get("inject_max_total_chars", 24000)
+    total_max = int(raw_tot) if raw_tot is not None else 24000
+
+    parts: list[str] = [
+        "\n\n---\n## 已注入技能\n下列说明已常驻上下文中，按其中流程直接调用相应工具即可。\n",
+    ]
+    used = 0
+    for e in entries:
+        sid = e["id"]
+        name = str(e.get("name") or sid)
+        got = read_skill_body(sid)
+        if not got:
+            continue
+        _meta, body = got
+        header = f"\n### 技能 [{sid}] {name}\n\n"
+        block = header + body
+        if total_max > 0 and used + len(block) > total_max:
+            room = total_max - used - len(header)
+            if room < 120:
+                parts.append("\n\n[后续技能因 inject_max_total_chars 上限已省略]\n")
+                break
+            block = header + body[: max(0, room)] + "\n\n[本技能正文已按总预算截断]\n"
+        parts.append(block)
+        used += len(block)
+
+    _inject_system_block_cache = "".join(parts)
+    return _inject_system_block_cache

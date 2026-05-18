@@ -28,7 +28,6 @@ from tools.middleware import (
     monitor_tool,
 )
 from model.factory import chat_model, turbo_model
-from raw_agent_skillkit import build_skill_tools
 from utils.prompt_utils import load_system_prompts
 
 if TYPE_CHECKING:
@@ -61,7 +60,6 @@ def compile_react_agent(*, checkpointer=None) -> "CompiledStateGraph":
         get_current_month,
         ext_data_tool,
         fill_context_for_report,
-        *build_skill_tools(),
     ]
     if checkpointer is not None:
         base_tools.append(request_user_clarification)

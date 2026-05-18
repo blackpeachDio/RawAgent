@@ -1,5 +1,6 @@
 from typing import Callable
 
+from raw_agent_skillkit.loader import build_skills_system_inject_block
 from utils.prompt_utils import (
     append_original_query_anchor,
     format_memory_system_prompt,
@@ -154,4 +155,8 @@ def build_system_prompt(request: ModelRequest):
     oq = request.runtime.context.get("original_query")
     if bool(agent_conf.get("agent_anchor_original_query", True)):
         base = append_original_query_anchor(base, oq if isinstance(oq, str) else "")
+    if not is_report:
+        inject = build_skills_system_inject_block()
+        if inject:
+            base = base + inject
     return base
